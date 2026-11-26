@@ -810,8 +810,7 @@ const PDFViewerApplication = {
       { signal }
     );
 
-    // Handle local file drops over the toolbar as well as the PDF pages.
-    const dropOptions = { capture: true, signal };
+    // Handle file drops that the page organizer and dialogs leave unhandled.
     window.addEventListener(
       "dragover",
       evt => {
@@ -819,13 +818,13 @@ const PDFViewerApplication = {
           evt.preventDefault();
         }
       },
-      dropOptions
+      { signal }
     );
     window.addEventListener(
       "drop",
       evt => {
         const { files } = evt.dataTransfer;
-        if (!files.length) {
+        if (evt.defaultPrevented || !files.length) {
           return;
         }
         evt.preventDefault();
@@ -833,11 +832,10 @@ const PDFViewerApplication = {
           ({ type, name }) => type === "application/pdf" || isPdfFile(name)
         );
         if (pdfFile) {
-          evt.stopPropagation();
           this.open({ file: pdfFile });
         }
       },
-      dropOptions
+      { signal }
     );
 
     if (!AppOptions.get("supportsDocumentFonts")) {
