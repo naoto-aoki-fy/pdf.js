@@ -334,9 +334,10 @@ async function runSmokeTests(browser, base) {
     const scriptsViewer = await scripts.waitForFrame(frame =>
       frame.url().startsWith(prefix + "/")
     );
-    await scriptsViewer.waitForFunction(
-      () => window.PDFViewerApplication?.scriptingReady === true
-    );
+    await scriptsViewer.waitForFunction(() => {
+      const app = window.PDFViewerApplication;
+      return app?.initialized && app.scriptingReady;
+    });
     const inputSelector = '[data-element-id="55R"]';
     const outputSelector = '[data-element-id="56R"]';
     await scriptsViewer.type(inputSelector, "1 + 1");
