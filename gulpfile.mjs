@@ -264,7 +264,7 @@ function writeToDirectory(readable, dest) {
   );
 }
 
-function copyCoreDistribution(dir) {
+function copyCoreDistribution(dir, testing) {
   const { version } = JSON.parse(fs.readFileSync(distManifest));
   if (version !== config.stableVersion) {
     throw new Error(
@@ -272,13 +272,22 @@ function copyCoreDistribution(dir) {
     );
   }
   const build = path.join(PDFJS_DIST_DIR, "legacy/build");
+  const modules = "pdf{,.worker,.renderer,.sandbox}.mjs";
+  let core = gulp.src(testing ? modules + "{,.map}" : modules, {
+    cwd: build,
+    encoding: false,
+  });
+  if (!testing) {
+    core = core.pipe(
+      transform("utf8", content =>
+        content
+          .toString()
+          .replace(/\r?\n\/\/# sourceMappingURL=[^\r\n]+(?:\r?\n)?$/, "")
+      )
+    );
+  }
   return ordered([
-    gulp
-      .src("pdf{,.worker,.renderer,.sandbox}.mjs{,.map}", {
-        cwd: build,
-        encoding: false,
-      })
-      .pipe(gulp.dest(dir + "build")),
+    core.pipe(gulp.dest(dir + "build")),
     gulp
       .src("LICENSE", { cwd: PDFJS_DIST_DIR, encoding: false })
       .pipe(rename("LICENSE.pdfjs-dist"))
@@ -367,7 +376,7 @@ function preprocessViewerFile(filename) {
 
 function buildViewer(dir, testing) {
   return ordered([
-    copyCoreDistribution(dir),
+    copyCoreDistribution(dir, testing),
     createWebpackStream("web/viewer.js", createWebpackConfig(testing)).pipe(
       gulp.dest(dir + "web")
     ),
