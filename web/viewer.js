@@ -34,6 +34,10 @@ function getViewerConfiguration() {
     principalContainer: document.getElementById("mainContainer"),
     mainContainer: document.getElementById("viewerContainer"),
     viewerContainer: document.getElementById("viewer"),
+    emptyViewerOpenButton:
+      typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")
+        ? document.getElementById("emptyViewerOpenButton")
+        : null,
     viewerAlert: document.getElementById("viewer-alert"),
     toolbar: {
       container: document.getElementById("toolbarContainer"),
@@ -96,7 +100,7 @@ function getViewerConfiguration() {
       toggleButton: document.getElementById("secondaryToolbarToggleButton"),
       presentationModeButton: document.getElementById("presentationMode"),
       openFileButton:
-        typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")
+        typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")
           ? document.getElementById("secondaryOpenFile")
           : null,
       printButton: document.getElementById("secondaryPrint"),
