@@ -1062,7 +1062,45 @@ const PDFViewerApplication = {
       });
     }
 
-    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
+    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")) {
+      const { emptyViewerOpenButton } = appConfig;
+      const { signal } = this._globalAbortController;
+      emptyViewerOpenButton.addEventListener(
+        "click",
+        () => eventBus.dispatch("openfile", { source: emptyViewerOpenButton }),
+        { signal }
+      );
+
+      // Handle local file drops over the toolbar as well as the PDF pages.
+      const dropOptions = { capture: true, signal };
+      window.addEventListener(
+        "dragover",
+        evt => {
+          if (evt.dataTransfer.types.includes("Files")) {
+            evt.preventDefault();
+          }
+        },
+        dropOptions
+      );
+      window.addEventListener(
+        "drop",
+        evt => {
+          const { files } = evt.dataTransfer;
+          if (!files.length) {
+            return;
+          }
+          evt.preventDefault();
+          const pdfFile = Array.from(files).find(
+            ({ type, name }) => type === "application/pdf" || isPdfFile(name)
+          );
+          if (pdfFile) {
+            evt.stopPropagation();
+            this.open({ file: pdfFile });
+          }
+        },
+        dropOptions
+      );
+    } else if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       // Enable dragging-and-dropping a new PDF file onto the viewerContainer.
       appConfig.mainContainer.addEventListener("dragover", function (evt) {
         for (const item of evt.dataTransfer.items) {
@@ -1131,6 +1169,7 @@ const PDFViewerApplication = {
       }
     } else if (PDFJSDev.test("CHROME") && !file) {
       this._hideViewBookmark();
+      appConfig.emptyViewerOpenButton.hidden = false;
     } else if (PDFJSDev.test("MOZCENTRAL || CHROME")) {
       this.setTitleUsingUrl(file, /* downloadUrl = */ file);
 
@@ -1487,6 +1526,10 @@ const PDFViewerApplication = {
    * @returns {Promise} - Promise that is resolved when the document is opened.
    */
   async open({ file, ...args }) {
+    const { emptyViewerOpenButton } = this.appConfig;
+    if (emptyViewerOpenButton) {
+      emptyViewerOpenButton.hidden = true;
+    }
     if (this.pdfLoadingTask) {
       // We need to destroy already opened document.
       await this.close();
@@ -1527,6 +1570,9 @@ const PDFViewerApplication = {
     } catch (reason) {
       if (localFileUrl) {
         URL.revokeObjectURL(localFileUrl);
+      }
+      if (emptyViewerOpenButton && !this.pdfViewer.pagesCount) {
+        emptyViewerOpenButton.hidden = false;
       }
       throw reason;
     }
@@ -1751,6 +1797,11 @@ const PDFViewerApplication = {
    */
   async _documentError(key, moreInfo = null) {
     this._unblockDocumentLoadEvent();
+
+    const { emptyViewerOpenButton } = this.appConfig;
+    if (emptyViewerOpenButton && !this.pdfViewer.pagesCount) {
+      emptyViewerOpenButton.hidden = false;
+    }
 
     const message = await this._otherError(
       key || "pdfjs-loading-error",
