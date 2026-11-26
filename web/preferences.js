@@ -37,20 +37,11 @@ class BasePreferences {
 
     this.#initializedPromise = this._readFromStorage(this.#defaults).then(
       ({ browserPrefs, prefs }) => {
-        if (
-          (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) &&
-          AppOptions._checkDisablePreferences()
-        ) {
-          return;
-        }
         AppOptions.setAll({ ...browserPrefs, ...prefs }, /* prefs = */ true);
       }
     );
 
-    if (
-      typeof PDFJSDev === "undefined" ||
-      PDFJSDev.test("(TESTING && !LIB) || MOZCENTRAL")
-    ) {
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
       window.addEventListener(
         "updatedPreference",
         async ({ detail: { name, value } }) => {
@@ -87,9 +78,6 @@ class BasePreferences {
    *                    have been reset.
    */
   async reset() {
-    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
-      throw new Error("Please use `about:config` to change preferences.");
-    }
     await this.#initializedPromise;
     AppOptions.setAll(this.#defaults, /* prefs = */ true);
 
@@ -107,11 +95,9 @@ class BasePreferences {
     await this.#initializedPromise;
     AppOptions.setAll({ [name]: value }, /* prefs = */ true);
 
-    await this._writeToStorage(
-      typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME || MOZCENTRAL")
-        ? { [name]: AppOptions.get(name) }
-        : AppOptions.getAll(OptionKind.PREFERENCE)
-    );
+    if (Object.hasOwn(this.#defaults, name)) {
+      await this._writeToStorage({ [name]: AppOptions.get(name) });
+    }
   }
 
   /**
@@ -121,9 +107,6 @@ class BasePreferences {
    *                    containing the value of the preference.
    */
   async get(name) {
-    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
-      throw new Error("Not implemented: get");
-    }
     await this.#initializedPromise;
     return AppOptions.get(name);
   }

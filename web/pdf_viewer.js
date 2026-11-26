@@ -13,12 +13,12 @@
  * limitations under the License.
  */
 
-/** @typedef {import("../src/display/api").PDFDocumentProxy} PDFDocumentProxy */
-/** @typedef {import("../src/display/api").PDFPageProxy} PDFPageProxy */
+/** @typedef {import("pdfjs-dist").PDFDocumentProxy} PDFDocumentProxy */
+/** @typedef {import("pdfjs-dist").PDFPageProxy} PDFPageProxy */
+
+/** @typedef {import("pdfjs-dist").PageViewport} PageViewport */
 // eslint-disable-next-line max-len
-/** @typedef {import("../src/display/page_viewport").PageViewport} PageViewport */
-// eslint-disable-next-line max-len
-/** @typedef {import("../src/display/optional_content_config").OptionalContentConfig} OptionalContentConfig */
+/** @typedef {import("pdfjs-dist/types/src/display/optional_content_config.js").OptionalContentConfig} OptionalContentConfig */
 /** @typedef {import("./event_utils").EventBus} EventBus */
 // eslint-disable-next-line max-len
 /** @typedef {import("./pdf_find_controller").PDFFindController} PDFFindController */
@@ -34,16 +34,15 @@ import {
   AnnotationEditorType,
   AnnotationEditorUIManager,
   AnnotationMode,
-  createPromiseCapability,
   makeArr,
   MathClamp,
-  noopFn,
   PermissionFlag,
   PixelsPerInch,
   shadow,
   stopEvent,
   version,
-} from "pdfjs-lib";
+} from "pdfjs-dist";
+import { createPromiseCapability, noopFn } from "./promise_utils.js";
 import {
   DEFAULT_SCALE,
   DEFAULT_SCALE_DELTA,
@@ -68,13 +67,11 @@ import {
   VERTICAL_PADDING,
   watchScroll,
 } from "./ui_utils.js";
-import { GenericL10n } from "web-null_l10n";
 import { internalOpt } from "./internal_evt.js";
 import { PDFPageView } from "./pdf_page_view.js";
-import { PDFRenderingQueue } from "./pdf_rendering_queue.js";
 import { RenderingStates } from "./renderable_view.js";
-import { SimpleLinkService } from "./pdf_link_service.js";
 
+const CORE_VERSION = "6.5.438";
 const DEFAULT_CACHE_SIZE = 10;
 
 const PagesCountLimit = {
@@ -95,19 +92,17 @@ function isValidAnnotationEditorMode(mode) {
  * @property {HTMLDivElement} container - The container for the viewer element.
  * @property {HTMLDivElement} [viewer] - The viewer element.
  * @property {EventBus} eventBus - The application event bus.
- * @property {PDFLinkService} [linkService] - The navigation/linking service.
+ * @property {PDFLinkService} linkService - The navigation/linking service.
  * @property {BaseDownloadManager} [downloadManager] - The download manager
  *   component.
  * @property {PDFFindController} [findController] - The find controller
  *   component.
  * @property {PDFScriptingManager} [scriptingManager] - The scripting manager
  *   component.
- * @property {PDFRenderingQueue} [renderingQueue] - The rendering queue object.
+ * @property {PDFRenderingQueue} renderingQueue - The rendering queue object.
  * @property {number} [textLayerMode] - Controls if the text layer used for
  *   selection and searching is created. The constants from {TextLayerMode}
  *   should be used. The default value is `TextLayerMode.ENABLE`.
- * @property {number} [newTextLayerMode] - Controls if the text layer uses fonts
- *   with the advances of the PDF fonts: 1 to enable, 2 to enable with fonts
  *   drawing their glyph boxes (debugging), anything else to disable.
  *   The default value is `0`.
  * @property {number} [annotationMode] - Controls if the annotation layer is
@@ -148,7 +143,7 @@ function isValidAnnotationEditorMode(mode) {
  *   rendering will keep track of which areas of the page each PDF operation
  *   affects. Then, when rendering a partial page (if `enableDetailCanvas` is
  *   enabled), it will only run through the operations that affect that portion.
- * @property {L10n} [l10n] - Localization service.
+ * @property {L10n} l10n - Localization service.
  * @property {boolean} [enablePermissions] - Enables PDF document permissions,
  *   when they exist. The default value is `false`.
  * @property {object} [pageColors] - Overwrites background and foreground colors
@@ -231,7 +226,7 @@ class PDFPageViewBuffer {
 }
 
 /**
- * Simple viewer control to display PDF content/pages.
+ * Viewer control to display PDF pages.
  */
 class PDFViewer {
   #buffer = null;
@@ -261,8 +256,6 @@ class PDFViewer {
   #enableNewAltTextWhenAddingImage = false;
 
   #enableAutoLinking = true;
-
-  #newTextLayerMode = 0;
 
   #abortSignal = null;
 
@@ -316,7 +309,9 @@ class PDFViewer {
    */
   constructor(options) {
     const viewerVersion =
-      typeof PDFJSDev !== "undefined" ? PDFJSDev.eval("BUNDLE_VERSION") : null;
+      typeof PDFJSDev !== "undefined"
+        ? PDFJSDev.eval("BUNDLE_VERSION")
+        : CORE_VERSION;
     if (version !== viewerVersion) {
       throw new Error(
         `The API version "${version}" does not match the Viewer version "${viewerVersion}".`
@@ -327,22 +322,10 @@ class PDFViewer {
     this.viewer = options.viewer || options.container.firstElementChild;
     this.#viewerAlert = options.viewerAlert || null;
 
-    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
-      if (this.container?.tagName !== "DIV" || this.viewer?.tagName !== "DIV") {
-        throw new Error("Invalid `container` and/or `viewer` option.");
-      }
-
-      if (
-        this.container.offsetParent &&
-        getComputedStyle(this.container).position !== "absolute"
-      ) {
-        throw new Error("The `container` must be absolutely positioned.");
-      }
-    }
     this.#resizeObserver.observe(this.container);
 
     this.eventBus = options.eventBus;
-    this.linkService = options.linkService || new SimpleLinkService();
+    this.linkService = options.linkService;
     this.downloadManager = options.downloadManager || null;
     this.findController = options.findController || null;
     this.#altTextManager = options.altTextManager || null;
@@ -378,27 +361,14 @@ class PDFViewer {
     this.enableSelectionRendering = options.enableSelectionRendering !== false;
     this.imagesRightClickMinSize = options.imagesRightClickMinSize ?? -1;
     this.l10n = options.l10n;
-    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
-      this.l10n ||= new GenericL10n();
-    }
     this.#enablePermissions = options.enablePermissions || false;
     this.pageColors = options.pageColors || null;
     this.#mlManager = options.mlManager || null;
     this.#supportsPinchToZoom = options.supportsPinchToZoom !== false;
     this.#enableAutoLinking = options.enableAutoLinking !== false;
-    this.#newTextLayerMode = options.newTextLayerMode ?? 0;
     this.#minDurationToUpdateCanvas = options.minDurationToUpdateCanvas ?? 500;
 
     this.renderingQueue = options.renderingQueue;
-    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
-      this.defaultRenderingQueue = !this.renderingQueue;
-
-      if (this.defaultRenderingQueue) {
-        // Custom rendering queue is not specified, using default one
-        this.renderingQueue = new PDFRenderingQueue();
-        this.renderingQueue.setViewer(this);
-      }
-    }
 
     const { abortSignal } = options;
     this.#abortSignal = abortSignal || null;
@@ -433,14 +403,6 @@ class PDFViewer {
       },
       internalOpt
     );
-
-    if (
-      (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) &&
-      !options.l10n
-    ) {
-      // Ensure that Fluent is connected in e.g. the COMPONENTS build.
-      this.l10n.translate(this.container);
-    }
   }
 
   get printingAllowed() {
@@ -672,13 +634,6 @@ class PDFViewer {
       pagesRotation: rotation,
       pageNumber,
     });
-
-    if (
-      (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) &&
-      this.defaultRenderingQueue
-    ) {
-      this.update();
-    }
   }
 
   get firstPagePromise() {
@@ -1036,14 +991,8 @@ class PDFViewer {
               this.#mlManager,
               this.#editorUndoBar,
               this.#supportsPinchToZoom,
-              // GeckoView's toolbar sticks out of the editor.
-              typeof PDFJSDev === "undefined"
-                ? window.isGECKOVIEW
-                : PDFJSDev.test("GECKOVIEW"),
-              // GeckoView needs unselected signatures as buttons for TalkBack.
-              typeof PDFJSDev === "undefined"
-                ? window.isGECKOVIEW
-                : PDFJSDev.test("GECKOVIEW")
+              /* toolbarOutsideEditor = */ false,
+              /* useButtonsForUnselectedSignatures = */ false
             );
             eventBus.dispatch("annotationeditoruimanager", {
               source: this,
@@ -1107,7 +1056,6 @@ class PDFViewer {
             optionalContentConfigPromise,
             renderingQueue: this.renderingQueue,
             textLayerMode,
-            newTextLayerMode: this.#newTextLayerMode,
             annotationMode,
             imageResourcesPath: this.imageResourcesPath,
             maxCanvasPixels: this.maxCanvasPixels,
@@ -1234,13 +1182,6 @@ class PDFViewer {
             viewer.lang = info.Language;
           }
         });
-
-        if (
-          (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) &&
-          this.defaultRenderingQueue
-        ) {
-          this.update();
-        }
       })
       .catch(reason => {
         if (pdfDocument !== this.pdfDocument) {
@@ -1695,13 +1636,6 @@ class PDFViewer {
       scale: newScale,
       presetValue: preset ? newValue : undefined,
     });
-
-    if (
-      (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) &&
-      this.defaultRenderingQueue
-    ) {
-      this.update();
-    }
   }
 
   get #pageWidthScaleFactor() {
@@ -2347,15 +2281,6 @@ class PDFViewer {
    *   The constants from {ScrollMode} should be used.
    */
   set scrollMode(mode) {
-    if (
-      typeof PDFJSDev === "undefined"
-        ? window.isGECKOVIEW
-        : PDFJSDev.test("GECKOVIEW")
-    ) {
-      // NOTE: Always ignore the pageLayout in GeckoView since there's
-      // no UI available to change Scroll/Spread modes for the user.
-      return;
-    }
     if (this._scrollMode === mode) {
       return; // The Scroll mode didn't change.
     }
@@ -2418,15 +2343,6 @@ class PDFViewer {
    *   The constants from {SpreadMode} should be used.
    */
   set spreadMode(mode) {
-    if (
-      typeof PDFJSDev === "undefined"
-        ? window.isGECKOVIEW
-        : PDFJSDev.test("GECKOVIEW")
-    ) {
-      // NOTE: Always ignore the pageLayout in GeckoView since there's
-      // no UI available to change Scroll/Spread modes for the user.
-      return;
-    }
     if (this._spreadMode === mode) {
       return; // The Spread mode didn't change.
     }

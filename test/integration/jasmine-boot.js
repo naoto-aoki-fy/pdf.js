@@ -18,14 +18,14 @@
 import { TEST_PASSED, TEST_UNEXPECTED_FAIL } from "../color_utils.mjs";
 import Jasmine from "jasmine";
 
-async function runTests(results) {
+async function runTests(results, filter) {
   const jasmine = new Jasmine();
   jasmine.exitOnCompletion = false;
   jasmine.jasmine.DEFAULT_TIMEOUT_INTERVAL = 30000;
 
   await jasmine.loadConfig({
     random: true,
-    spec_dir: "integration",
+    spec_dir: "test/integration",
     spec_files: [
       "accessibility_spec.mjs",
       "annotation_spec.mjs",
@@ -38,7 +38,6 @@ async function runTests(results) {
       "document_properties_spec.mjs",
       "find_spec.mjs",
       "freetext_editor_spec.mjs",
-      "geckoview_spec.mjs",
       "highlight_editor_spec.mjs",
       "ink_editor_spec.mjs",
       "presentation_mode_spec.mjs",
@@ -46,7 +45,6 @@ async function runTests(results) {
       "scripting_commands_spec.mjs",
       "scripting_spec.mjs",
       "signature_editor_spec.mjs",
-      "simple_viewer_spec.mjs",
       "stamp_editor_spec.mjs",
       "text_extractor_spec.mjs",
       "text_field_spec.mjs",
@@ -112,7 +110,7 @@ async function runTests(results) {
     suiteStarted(result) {},
   });
 
-  return jasmine.execute();
+  return jasmine.execute(null, filter);
 }
 
 export { runTests };

@@ -15,16 +15,15 @@
 
 import {
   AnnotationMode,
-  createPromiseCapability,
-  noopFn,
   PixelsPerInch,
   RenderingCancelledException,
   shadow,
-} from "pdfjs-lib";
+} from "pdfjs-dist";
 import {
   BasePrintServiceFactory,
   getXfaHtmlForPrinting,
 } from "./print_utils.js";
+import { createPromiseCapability, noopFn } from "./promise_utils.js";
 
 let activeService = null;
 let dialog = null;
@@ -310,9 +309,6 @@ function abort() {
 }
 
 function renderProgress(index, total) {
-  if (typeof PDFJSDev === "undefined" && window.isGECKOVIEW) {
-    return;
-  }
   dialog ||= document.getElementById("printServiceDialog");
   const progress = Math.round((100 * index) / total);
   const progressBar = dialog.querySelector("progress");
@@ -355,11 +351,6 @@ if ("onbeforeprint" in window) {
 
 let overlayPromise;
 function ensureOverlay() {
-  if (typeof PDFJSDev === "undefined" && window.isGECKOVIEW) {
-    return Promise.reject(
-      new Error("ensureOverlay not implemented in GECKOVIEW development mode.")
-    );
-  }
   if (!overlayPromise) {
     overlayManager = viewerApp.overlayManager;
     if (!overlayManager) {

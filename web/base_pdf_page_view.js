@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { FeatureTest, RenderingCancelledException } from "pdfjs-lib";
+import { FeatureTest, RenderingCancelledException } from "pdfjs-dist";
 import { RenderableView, RenderingStates } from "./renderable_view.js";
 import { AppOptions } from "./app_options.js";
 
@@ -113,11 +113,7 @@ class BasePDFPageView extends RenderableView {
   }
 
   get #useAlphaCanvas() {
-    return (
-      typeof PDFJSDev !== "undefined" &&
-      PDFJSDev.test("CHROME") &&
-      AppOptions.get("disableSubpixelRendering")
-    );
+    return AppOptions.get("disableSubpixelRendering");
   }
 
   _createCanvas(onShow, hideUntilComplete = false) {

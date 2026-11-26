@@ -21,6 +21,7 @@ import {
   copyToClipboard,
   countSerialized,
   countStorageEntries,
+  createEditorAndGetSelector,
   createPromise,
   decodePNG,
   dragAndDrop,
@@ -29,7 +30,6 @@ import {
   getEditors,
   getEditorSelector,
   getFirstSerialized,
-  getNextEditorId,
   getRect,
   getSerialized,
   isCanvasMonochrome,
@@ -118,11 +118,14 @@ const createFreeTextEditor = async ({
   data = null,
   noFocusIn = false,
 }) => {
-  const editorSelector = getEditorSelector(await getNextEditorId(page));
   const serializedCount = await countSerialized(page);
   const storageEntriesCount = await countStorageEntries(page);
 
-  await page.mouse.click(x, y);
+  const editorSelector = await createEditorAndGetSelector(
+    page,
+    ".freeTextEditor",
+    () => page.mouse.click(x, y)
+  );
   await page.waitForSelector(editorSelector, { visible: true });
   if (data) {
     await page.type(`${editorSelector} .internal`, data);
@@ -1562,12 +1565,12 @@ describe("FreeText Editor", () => {
           });
 
           for (const n of [0, 1, 2, 3, 4]) {
-            const annotationId = await page.evaluate(N => {
-              const editor = document.getElementById(
-                `pdfjs_internal_editor_${N}`
-              );
-              return editor.getAttribute("annotation-id");
-            }, n);
+            const annotationId = await page.evaluate(editorId => {
+              const { annotationStorage } =
+                window.PDFViewerApplication.pdfDocument;
+              return annotationStorage.getRawValue(editorId)
+                .annotationElementId;
+            }, `pdfjs_internal_editor_${n}`);
             const { annotationCentroid, rect } =
               centroidAnnotations.get(annotationId);
             const editorPng = await page.screenshot({
@@ -1629,12 +1632,12 @@ describe("FreeText Editor", () => {
           });
 
           for (const n of [0, 1, 2, 3]) {
-            const annotationId = await page.evaluate(N => {
-              const editor = document.getElementById(
-                `pdfjs_internal_editor_${N}`
-              );
-              return editor.getAttribute("annotation-id");
-            }, n);
+            const annotationId = await page.evaluate(editorId => {
+              const { annotationStorage } =
+                window.PDFViewerApplication.pdfDocument;
+              return annotationStorage.getRawValue(editorId)
+                .annotationElementId;
+            }, `pdfjs_internal_editor_${n}`);
             const { annotationCentroid, rect } =
               centroidAnnotations.get(annotationId);
             const editorPng = await page.screenshot({

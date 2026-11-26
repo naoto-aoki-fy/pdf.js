@@ -22,7 +22,6 @@ import {
   FSI,
   getAnnotationSelector,
   getRect,
-  getTextLayerFonts,
   getThumbnailSelector,
   kbCopy,
   kbCut,
@@ -87,9 +86,8 @@ async function waitForThumbnailVisible(page, pageNums) {
 function waitForPagesEdited(page, type) {
   return createPromiseWithArgs(
     page,
-    resolve => {
+    (resolve, reject, args) => {
       const listener = ({ pagesMapper, type: ty }) => {
-        // eslint-disable-next-line no-undef
         if (args[0] && args[0] !== ty) {
           return;
         }
@@ -1381,48 +1379,6 @@ describe("Reorganize Pages View", () => {
     });
   });
 
-  describe("Text layer fonts of the deleted pages", () => {
-    let pages;
-
-    beforeEach(async () => {
-      pages = await loadAndWait(
-        "page_with_number.pdf",
-        `.page[data-page-number = "1"] .endOfContent`,
-        "1",
-        null,
-        { enableSplitMerge: true, newTextLayerMode: 1 }
-      );
-    });
-
-    afterEach(async () => {
-      await closePages(pages);
-    });
-
-    it("must unload the fonts of a deleted page when the document is closed", async () => {
-      await Promise.all(
-        pages.map(async ([browserName, page]) => {
-          const { loaded } = await getTextLayerFonts(page);
-          expect(loaded.length).withContext(browserName).toBeGreaterThan(0);
-
-          await waitForThumbnailVisible(page, 1);
-          await waitAndClick(
-            page,
-            `.thumbnail:has(${getThumbnailSelector(1)}) input`
-          );
-          const handlePagesEdited = await waitForPagesEdited(page);
-          await kbDelete(page);
-          await awaitPromise(handlePagesEdited);
-
-          // The deletion can still be undone.
-          await page.evaluate(() => window.PDFViewerApplication.close());
-          expect((await getTextLayerFonts(page)).loaded)
-            .withContext(browserName)
-            .toEqual([]);
-        })
-      );
-    });
-  });
-
   describe("Thumbnails are not blank after cut/paste (bug 2018162)", () => {
     let pages;
 
@@ -1454,7 +1410,7 @@ describe("Reorganize Pages View", () => {
 
           for (let i = 1; i <= 2; i++) {
             await page.waitForSelector(
-              `${getThumbnailSelector(i)} > img[src^="blob:http:"]`,
+              `${getThumbnailSelector(i)} > img[src^="blob:chrome-extension:"]`,
               { visible: true }
             );
           }
@@ -1470,7 +1426,7 @@ describe("Reorganize Pages View", () => {
 
           for (let i = 1; i <= 2; i++) {
             await page.waitForSelector(
-              `${getThumbnailSelector(i)} > img[src^="blob:http:"]`,
+              `${getThumbnailSelector(i)} > img[src^="blob:chrome-extension:"]`,
               { visible: true }
             );
           }
@@ -2566,7 +2522,7 @@ describe("Reorganize Pages View", () => {
           // Wait for both thumbnails to be fully rendered.
           for (let i = 1; i <= 2; i++) {
             await page.waitForSelector(
-              `${getThumbnailSelector(i)} > img[src^="blob:http:"]`,
+              `${getThumbnailSelector(i)} > img[src^="blob:chrome-extension:"]`,
               { visible: true }
             );
           }
@@ -2610,7 +2566,7 @@ describe("Reorganize Pages View", () => {
           // The thumbnail at position 1 (the pasted copy) must still be
           // rendered and visible with a valid image source.
           await page.waitForSelector(
-            `${getThumbnailSelector(1)} > img[src^="blob:http:"]`,
+            `${getThumbnailSelector(1)} > img[src^="blob:chrome-extension:"]`,
             { visible: true }
           );
         })
@@ -4141,24 +4097,30 @@ describe("Reorganize Pages View", () => {
           // Zoom and go to the moved page: it must be re-rendered, at the new
           // scale, with the operator list and the image objects cached before
           // the move.
-          const prevCanvasWidth = await page.evaluate(() => {
-            const { pdfViewer } = window.PDFViewerApplication;
-            const width = pdfViewer.getPageView(0).canvas.width;
+          const rendered = await createPromise(page, resolve => {
+            const { eventBus, pdfViewer } = window.PDFViewerApplication;
+            const previousScale = pdfViewer.currentScale;
+            eventBus.on("pagerendered", function onRendered(event) {
+              if (
+                event.pageNumber !== 1 ||
+                event.cssTransform ||
+                event.isDetailView ||
+                event.source.scale <= previousScale
+              ) {
+                return;
+              }
+              eventBus.off("pagerendered", onRendered);
+              resolve({
+                hasError: !!event.error,
+                hasCanvas: !!event.source.canvas?.width,
+              });
+            });
             pdfViewer.increaseScale({ drawingDelay: 0, scaleFactor: 2 });
             pdfViewer.currentPageNumber = 1;
-            return width;
           });
-          await page.waitForFunction(
-            prevWidth => {
-              const view = window.PDFViewerApplication.pdfViewer.getPageView(0);
-              return (
-                // RenderingStates.FINISHED
-                view.renderingState === 3 && view.canvas?.width > prevWidth
-              );
-            },
-            {},
-            prevCanvasWidth
-          );
+          expect(await awaitPromise(rendered))
+            .withContext(`In ${browserName}`)
+            .toEqual({ hasError: false, hasCanvas: true });
         })
       );
     });

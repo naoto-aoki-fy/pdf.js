@@ -15,13 +15,8 @@
 
 /** @typedef {import("./event_utils").EventBus} EventBus */
 
-import {
-  createPromiseCapability,
-  getUuid,
-  makeArr,
-  noopFn,
-  shadow,
-} from "pdfjs-lib";
+import { createPromiseCapability, noopFn } from "./promise_utils.js";
+import { getUuid, makeArr, shadow } from "pdfjs-dist";
 import { apiPageLayoutToViewerModes } from "./ui_utils.js";
 import { internalOpt } from "./internal_evt.js";
 import { RenderingStates } from "./renderable_view.js";
@@ -48,7 +43,6 @@ const STATIC_COMMANDS = new Set([
   "error",
   "print",
   "println",
-  "sandboxTripEnd",
 ]);
 // Layout-change guard: a gesture starting sooner than this after a script
 // changed the layout isn't honored, like `security.notification_enable_delay`
@@ -133,14 +127,10 @@ class PDFScriptingManager {
 
     if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("TESTING")) {
       Object.defineProperty(this, "sandboxTrip", {
+        // The published sandbox omits the testing reply. The dispatch itself
+        // resolves after synchronous sandbox updates have reached the viewer.
         value: () =>
-          setTimeout(
-            () =>
-              this.#scripting?.dispatchEventInSandbox({
-                name: "sandboxtripbegin",
-              }),
-            0
-          ),
+          this.#scripting?.dispatchEventInSandbox({ name: "sandboxtripbegin" }),
       });
     }
   }
@@ -196,24 +186,6 @@ class PDFScriptingManager {
 
     this.#eventAC = new AbortController();
     const evtOpts = { signal: this.#eventAC.signal, ...internalOpt };
-
-    if (
-      (typeof PDFJSDev === "undefined" || PDFJSDev.test("COMPONENTS")) &&
-      this.#externalServices.addScriptingWindowListener
-    ) {
-      // The default viewer already handles adding/removing of DOM events,
-      // hence limit this to only the viewer components.
-      window.addEventListener(
-        "updatefromsandbox",
-        event => {
-          eventBus.dispatch("updatefromsandbox", {
-            source: window,
-            detail: event.detail,
-          });
-        },
-        { signal: this.#eventAC.signal }
-      );
-    }
 
     eventBus.on(
       "updatefromsandbox",
@@ -530,6 +502,10 @@ class PDFScriptingManager {
     return this.#ready;
   }
 
+  get hasSandbox() {
+    return this.#scripting !== null;
+  }
+
   /**
    * @private
    */
@@ -554,16 +530,6 @@ class PDFScriptingManager {
     if (!id) {
       if (!STATIC_COMMANDS.has(command)) {
         this.#markLayoutChange();
-      }
-      if (
-        typeof PDFJSDev !== "undefined" &&
-        PDFJSDev.test("TESTING") &&
-        command === "sandboxTripEnd"
-      ) {
-        window.setTimeout(() => {
-          window.dispatchEvent(new CustomEvent("sandboxtripend"));
-        }, 0);
-        return;
       }
 
       switch (command) {

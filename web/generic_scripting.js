@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { getPdfFilenameFromUrl } from "pdfjs-lib";
+import { getPdfFilenameFromUrl } from "pdfjs-dist";
 
 async function docProperties(pdfDocument) {
   const url = "",
@@ -36,14 +36,10 @@ async function docProperties(pdfDocument) {
 class GenericScripting {
   constructor(sandboxBundleSrc, wasmUrl) {
     this._ready = new Promise((resolve, reject) => {
-      const sandbox =
-        typeof PDFJSDev === "undefined"
-          ? import(sandboxBundleSrc) // eslint-disable-line no-unsanitized/method
-          : __raw_import__(sandboxBundleSrc);
-      sandbox
+      __raw_import__(sandboxBundleSrc)
         .then(pdfjsSandbox => {
           resolve(
-            pdfjsSandbox.QuickJSSandbox(new URL(wasmUrl, location.href).href)
+            pdfjsSandbox.QuickJSSandbox(new URL(wasmUrl, document.baseURI).href)
           );
         })
         .catch(reject);

@@ -16,10 +16,12 @@
 /** @typedef {import("./event_utils").EventBus} EventBus */
 
 /**
- * @import { CatalogAttachmentContent } from "../src/core/catalog.js";
+ * @import {
+ *   CatalogAttachmentContent,
+ * } from "pdfjs-dist/types/src/core/catalog.js";
  */
 
-import { isValidExplicitDest, PasswordException } from "pdfjs-lib";
+import { isValidExplicitDest, PasswordException } from "pdfjs-dist";
 import { internalOpt } from "./internal_evt.js";
 import { parseQueryString } from "./ui_utils.js";
 
@@ -445,17 +447,7 @@ class PDFLinkService {
       if (params.has("nameddest")) {
         this.goToDestination(params.get("nameddest"));
       }
-
-      if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
-        return;
-      }
-      // Support opening of PDF attachments in the Firefox PDF Viewer,
-      // which uses a couple of non-standard hash parameters; refer to
-      // `DownloadManager._getOpenDataUrl` in the firefoxcom.js file.
-      if (!params.has("filename") || !params.has("filedest")) {
-        return;
-      }
-      hash = params.get("filedest");
+      return;
     }
 
     // Named (or explicit) destination.

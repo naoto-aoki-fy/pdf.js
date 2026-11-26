@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-/** @typedef {import("../src/display/api").PDFDocumentProxy} PDFDocumentProxy */
-/** @typedef {import("../src/display/api").PDFPageProxy} PDFPageProxy */
+/** @typedef {import("pdfjs-dist").PDFDocumentProxy} PDFDocumentProxy */
+/** @typedef {import("pdfjs-dist").PDFPageProxy} PDFPageProxy */
 /** @typedef {import("./event_utils").EventBus} EventBus */
 /** @typedef {import("./l10n.js").L10n} L10n */
 // eslint-disable-next-line max-len
@@ -27,7 +27,7 @@ import {
   isValidRotation,
   watchScroll,
 } from "./ui_utils.js";
-import { MathClamp, noContextMenu, stopEvent } from "pdfjs-lib";
+import { MathClamp, noContextMenu, stopEvent } from "pdfjs-dist";
 import { internalOpt } from "./internal_evt.js";
 import { Menu } from "./menu.js";
 import { PDFThumbnailView } from "./pdf_thumbnail_view.js";
@@ -710,7 +710,7 @@ class PDFThumbnailViewer {
       return canvas.transferToImageBitmap();
     }
     // createImageBitmap doesn't work with SVG (mirroring the workaround in
-    // src/display/editor/tools.js ImageManager): load the file via an Image
+    // the display layer’s ImageManager): load the file via an Image
     // element and rasterize it through an OffscreenCanvas. The target raster
     // size uses the SVG's intrinsic dimensions, clamped so the longest side
     // falls in [1024, 4096]: large enough to avoid pixelation when fitted to

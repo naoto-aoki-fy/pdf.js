@@ -13,13 +13,13 @@
  * limitations under the License.
  */
 
-/** @typedef {import("../src/display/api").PDFDocumentProxy} PDFDocumentProxy */
+/** @typedef {import("pdfjs-dist").PDFDocumentProxy} PDFDocumentProxy */
 /** @typedef {import("./event_utils").EventBus} EventBus */
 /** @typedef {import("./pdf_link_service.js").PDFLinkService} PDFLinkService */
 
 import { getNormalizeWithNFKC, isEntireWord } from "./pdf_find_utils.js";
 import { binarySearchFirstItem } from "./ui_utils.js";
-import { createPromiseCapability } from "pdfjs-lib";
+import { createPromiseCapability } from "./promise_utils.js";
 import { internalOpt } from "./internal_evt.js";
 
 const FindState = {
@@ -810,8 +810,6 @@ class PDFFindController {
         this.#updateUIResultsCount();
       }
     } else if (++this.#visitedPagesCount === this._linkService.pagesCount) {
-      // For example, in GeckoView we want to have only the final update because
-      // the Java side provides only one object to update the counts.
       this.#updateUIResultsCount();
     }
   }

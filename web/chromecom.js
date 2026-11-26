@@ -14,10 +14,15 @@
  */
 /* globals chrome */
 
+import {
+  FakeMLManager,
+  FakeSignatureVerifier,
+} from "../test/integration/viewer_services.js";
 import { AppOptions } from "./app_options.js";
+import { BaseDownloadManager } from "./base_download_manager.js";
 import { BaseExternalServices } from "./external_services.js";
 import { BasePreferences } from "./preferences.js";
-import { DownloadManager as GenericDownloadManager } from "./download_manager.js";
+import { createValidAbsoluteUrl } from "pdfjs-dist";
 import { GenericL10n } from "./genericl10n.js";
 import { GenericScripting } from "./generic_scripting.js";
 import { SignatureStorage } from "./generic_signature_storage.js";
@@ -25,12 +30,6 @@ import { SignatureStorage } from "./generic_signature_storage.js";
 // These strings are from chrome/app/resources/generated_resources_*.xtb.
 // eslint-disable-next-line sort-imports
 import i18nFileAccessLabels from "./chrome-i18n-allow-access-to-file-urls.json" with { type: "json" };
-
-if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("CHROME")) {
-  throw new Error(
-    'Module "pdfjs-web/chromecom" shall not be used outside CHROME build.'
-  );
-}
 
 (function rewriteUrlClosure() {
   // Run this code outside DOMContentLoaded to make sure that the URL
@@ -322,14 +321,32 @@ function setReferer(url, callback) {
   }
 }
 
-/**
- * This "should" really extend the `BaseDownloadManager` class,
- * however doing it this way instead reduces code duplication.
- */
-class DownloadManager extends GenericDownloadManager {
+class DownloadManager extends BaseDownloadManager {
+  _triggerDownload(blobUrl, originalUrl, filename, isAttachment = false) {
+    if (!blobUrl && !isAttachment) {
+      // Fallback to downloading non-attachments by their URL.
+      if (!createValidAbsoluteUrl(originalUrl, "http://example.com")) {
+        throw new Error(`_triggerDownload - not a valid URL: ${originalUrl}`);
+      }
+      blobUrl = originalUrl + "#pdfjs.action=download";
+    }
+
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.target = "_parent";
+    // Use a.download if available. This increases the likelihood that
+    // the file is downloaded instead of opened in a new viewer.
+    if ("download" in a) {
+      a.download = filename;
+    }
+    (document.body || document.documentElement).append(a);
+    a.click();
+    a.remove();
+  }
+
   _getOpenDataUrl(blobUrl, filename, dest = null) {
     // In the Chrome extension, the URL is rewritten using the history API
-    // in viewer.js, so an absolute URL must be generated.
+    // above, so an absolute URL must be generated.
     let url =
       chrome.runtime.getURL("/content/web/viewer.html") +
       "?file=" +
@@ -436,6 +453,17 @@ class Preferences extends BasePreferences {
 }
 
 class ExternalServices extends BaseExternalServices {
+  constructor() {
+    super();
+    if (PDFJSDev.test("TESTING")) {
+      Object.defineProperty(this, "reportText", {
+        value: data => {
+          window._reportTextData = data;
+        },
+      });
+    }
+  }
+
   initPassiveLoading() {
     ChromeCom.resolvePDFFile(
       AppOptions.get("defaultUrl"),
@@ -446,7 +474,11 @@ class ExternalServices extends BaseExternalServices {
   }
 
   async createL10n() {
-    return new GenericL10n(navigator.language);
+    return new GenericL10n(
+      (PDFJSDev.test("TESTING") && AppOptions.get("localeProperties")?.lang) ||
+        navigator.language ||
+        "en-US"
+    );
   }
 
   createScripting() {
@@ -456,12 +488,22 @@ class ExternalServices extends BaseExternalServices {
     );
   }
 
+  createSignatureVerifier() {
+    return PDFJSDev.test("TESTING") ? new FakeSignatureVerifier() : null;
+  }
+
   createSignatureStorage(eventBus, signal) {
     return new SignatureStorage(eventBus, signal);
   }
 }
 
 class MLManager {
+  static {
+    if (PDFJSDev.test("TESTING")) {
+      this.getFakeMLManager = options => new FakeMLManager(options);
+    }
+  }
+
   isEnabledFor(_name) {
     return false;
   }

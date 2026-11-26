@@ -13,8 +13,9 @@
  * limitations under the License.
  */
 
-import { createPromiseCapability, makeSet } from "pdfjs-lib";
 import { INTERNAL_EVT, internalOpt } from "./internal_evt.js";
+import { createPromiseCapability } from "./promise_utils.js";
+import { makeSet } from "pdfjs-dist";
 
 const WaitOnType = {
   EVENT: "event",
@@ -75,7 +76,7 @@ class EventBus {
   #listeners = new Map();
 
   constructor() {
-    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
+    if (typeof PDFJSDev === "undefined") {
       // Prevent the class methods from being overridden by third-party users,
       // to ensure that `INTERNAL_EVT` cannot be accessed from the outside.
       Object.seal(this);
@@ -155,58 +156,4 @@ class EventBus {
   }
 }
 
-/**
- * NOTE: Only used in the Firefox built-in pdf viewer.
- */
-class FirefoxEventBus extends EventBus {
-  #externalServices;
-
-  #globalEventNames;
-
-  #isInAutomation;
-
-  constructor(globalEventNames, externalServices, isInAutomation) {
-    super();
-    this.#globalEventNames = globalEventNames;
-    this.#externalServices = externalServices;
-    this.#isInAutomation = isInAutomation;
-  }
-
-  dispatch(eventName, data) {
-    if (typeof PDFJSDev !== "undefined" && !PDFJSDev.test("MOZCENTRAL")) {
-      throw new Error("Not implemented: FirefoxEventBus.dispatch");
-    }
-    super.dispatch(eventName, data);
-
-    if (this.#isInAutomation) {
-      const detail = Object.create(null);
-      if (data) {
-        for (const key in data) {
-          const value = data[key];
-          if (key === "source") {
-            if (value === window || value === document) {
-              return; // No need to re-dispatch (already) global events.
-            }
-            continue; // Ignore the `source` property.
-          }
-          detail[key] = value;
-        }
-      }
-      const event = new CustomEvent(eventName, {
-        bubbles: true,
-        cancelable: true,
-        detail,
-      });
-      document.dispatchEvent(event);
-    }
-
-    if (this.#globalEventNames?.has(eventName)) {
-      this.#externalServices.dispatchGlobalEvent({
-        eventName,
-        detail: data,
-      });
-    }
-  }
-}
-
-export { EventBus, FirefoxEventBus, waitOnEventOrTimeout, WaitOnType };
+export { EventBus, waitOnEventOrTimeout, WaitOnType };

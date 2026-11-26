@@ -46,9 +46,9 @@ import { PagesCountLimit } from "./pdf_viewer.js";
  *   clockwise.
  * @property {HTMLButtonElement} pageRotateCcwButton - Button to rotate the
  *   pages counterclockwise.
- * @property {HTMLButtonElement} [invertPdfBrightnessButton] - Button to toggle
+ * @property {HTMLButtonElement} invertPdfBrightnessButton - Button to toggle
  *   PDF page brightness inversion in the Chrome extension.
- * @property {HTMLButtonElement} [disableSubpixelRenderingButton] - Button to
+ * @property {HTMLButtonElement} disableSubpixelRenderingButton - Button to
  *   disable subpixel text rendering in the Chrome extension.
  * @property {HTMLButtonElement} cursorSelectToolButton - Button to enable the
  *   select tool.
@@ -75,6 +75,7 @@ class SecondaryToolbar {
         eventName: "presentationmode",
         close: true,
       },
+      { element: options.openFileButton, eventName: "openfile", close: true },
       { element: options.printButton, eventName: "print", close: true },
       { element: options.downloadButton, eventName: "download", close: true },
       { element: options.viewBookmarkButton, eventName: null, close: true },
@@ -88,6 +89,16 @@ class SecondaryToolbar {
       {
         element: options.pageRotateCcwButton,
         eventName: "rotateccw",
+        close: false,
+      },
+      {
+        element: options.invertPdfBrightnessButton,
+        eventName: "togglepdfbrightness",
+        close: false,
+      },
+      {
+        element: options.disableSubpixelRenderingButton,
+        eventName: "togglesubpixelrendering",
         close: false,
       },
       {
@@ -155,30 +166,6 @@ class SecondaryToolbar {
         close: true,
       },
     ];
-    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")) {
-      buttons.push({
-        element: options.openFileButton,
-        eventName: "openfile",
-        close: true,
-      });
-    }
-    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")) {
-      if (options.invertPdfBrightnessButton) {
-        buttons.push({
-          element: options.invertPdfBrightnessButton,
-          eventName: "togglepdfbrightness",
-          close: false,
-        });
-      }
-      if (options.disableSubpixelRenderingButton) {
-        buttons.push({
-          element: options.disableSubpixelRenderingButton,
-          eventName: "togglesubpixelrendering",
-          close: false,
-        });
-      }
-    }
-
     this.eventBus = eventBus;
     this.opened = false;
 
