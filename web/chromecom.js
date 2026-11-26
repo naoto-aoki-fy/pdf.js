@@ -43,9 +43,11 @@ if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("CHROME")) {
     defaultUrl = queryString.slice(4);
   }
 
-  // Example: chrome-extension://.../http://example.com/file.pdf
-  const humanReadableUrl = "/" + defaultUrl + location.hash;
-  history.replaceState(history.state, "", humanReadableUrl);
+  if (defaultUrl) {
+    // Example: chrome-extension://.../http://example.com/file.pdf
+    const humanReadableUrl = "/" + defaultUrl + location.hash;
+    history.replaceState(history.state, "", humanReadableUrl);
+  }
 
   AppOptions.set("defaultUrl", defaultUrl);
 })();
@@ -90,6 +92,10 @@ const ChromeCom = {
    * @param {Function} callback - A callback with resolved URL and file length.
    */
   resolvePDFFile(file, callback) {
+    // A local file opened while resolving the startup URL takes precedence.
+    const localFileOpenId = viewerApp._localFileOpenId;
+    const isCurrent = () => localFileOpenId === viewerApp._localFileOpenId;
+
     // Expand drive:-URLs to filesystem URLs (Chrome OS)
     file = file.replace(
       /^drive:/i,
@@ -101,12 +107,17 @@ const ChromeCom = {
       // There is no UI to input a different URL, so this assumption will hold
       // for now.
       setReferer(file, function () {
-        callback(file);
+        if (isCurrent()) {
+          callback(file);
+        }
       });
       return;
     }
     if (/^file?:/.test(file)) {
       getEmbedderOrigin(function (origin) {
+        if (!isCurrent()) {
+          return;
+        }
         // If the origin cannot be determined, let Chrome decide whether to
         // allow embedding files. Otherwise, only allow local files to be
         // embedded from local files or Chrome extensions.
@@ -121,6 +132,9 @@ const ChromeCom = {
           return;
         }
         isAllowedFileSchemeAccess(function (isAllowedAccess) {
+          if (!isCurrent()) {
+            return;
+          }
           if (isAllowedAccess) {
             callback(file);
           } else {
