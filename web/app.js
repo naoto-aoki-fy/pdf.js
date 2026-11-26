@@ -181,7 +181,7 @@ const PDFViewerApplication = {
   baseUrl: "",
   mlManager: null,
   _downloadUrl: "",
-  _localFileUrl: null,
+  _localFile: null,
   _isMergedDocument: false,
   _eventBusAC: null,
   _windowAC: null,
@@ -1425,12 +1425,12 @@ const PDFViewerApplication = {
     }
     const promises = [];
 
-    const localFileUrl = this._localFileUrl;
-    this._localFileUrl = null;
+    const localFile = this._localFile;
+    this._localFile = null;
     let destroyPromise = this.pdfLoadingTask.destroy();
-    if (localFileUrl) {
+    if (localFile) {
       destroyPromise = destroyPromise.finally(() => {
-        URL.revokeObjectURL(localFileUrl);
+        URL.revokeObjectURL(localFile.url);
       });
     }
     promises.push(destroyPromise);
@@ -1530,7 +1530,7 @@ const PDFViewerApplication = {
       }
       throw reason;
     }
-    this._localFileUrl = localFileUrl;
+    this._localFile = localFileUrl ? { file, url: localFileUrl } : null;
     this.pdfLoadingTask = loadingTask;
 
     loadingTask.onPassword = (updateCallback, reason) => {
@@ -1586,19 +1586,23 @@ const PDFViewerApplication = {
       return;
     }
 
+    const { _localFile, _downloadUrl, _docFilename, _isMergedDocument } = this;
     let data;
     try {
       data = await (this.pdfDocument
         ? this.pdfDocument.getData()
         : this.pdfLoadingTask.getData());
     } catch {
-      // When the PDF document isn't ready, simply download using the URL.
+      // Local Blob URLs cannot use the download manager's URL fallback.
+      if (_localFile) {
+        data = new Uint8Array(await _localFile.file.arrayBuffer());
+      }
     }
     this.downloadManager.download(
       data,
-      this._downloadUrl,
-      this._docFilename,
-      /* isModified = */ this._isMergedDocument
+      _downloadUrl,
+      _docFilename,
+      /* isModified = */ _isMergedDocument
     );
   },
 
@@ -1615,7 +1619,7 @@ const PDFViewerApplication = {
     }
     this._saveInProgress = true;
     // Keep the document that this save belongs to.
-    const { pdfDocument } = this;
+    const { pdfDocument, _downloadUrl, _docFilename } = this;
     const isPrinting = flatten && intent === "print";
 
     try {
@@ -1633,8 +1637,8 @@ const PDFViewerApplication = {
       });
       this.downloadManager.download(
         data,
-        this._downloadUrl,
-        this._docFilename,
+        _downloadUrl,
+        _docFilename,
         /* isModified = */ true
       );
     } catch (reason) {
