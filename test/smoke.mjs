@@ -52,6 +52,7 @@ async function runSmokeTests(browser, base) {
         defaultZoomValue: "page-width",
         disableWorkerRendering: false,
         enableScripting: true,
+        openPdfAutomatically: true,
       });
       return globalThis.chrome.storage.sync.get("defaultZoomValue");
     });
@@ -65,6 +66,12 @@ async function runSmokeTests(browser, base) {
       });
     }, extensionId);
     await management.close();
+    await extensionSettings.waitForFunction(async () => {
+      const prefs = await globalThis.chrome.storage.session.get(
+        "pdfRedirectRulesEnabled"
+      );
+      return prefs.pdfRedirectRulesEnabled === true;
+    });
     await extensionSettings.close();
     const cdp = await browser.target().createCDPSession();
     await cdp.send("Browser.setDownloadBehavior", {
@@ -124,8 +131,14 @@ async function runSmokeTests(browser, base) {
           throw error;
         }
       }
+      const viewer =
+        kind === "local"
+          ? await page.waitForFrame(frame =>
+              frame.url().startsWith(prefix + "/")
+            )
+          : page.mainFrame();
       try {
-        await page.waitForFunction(
+        await viewer.waitForFunction(
           () =>
             window.PDFViewerApplication?.pdfDocument &&
             document.querySelector(".textLayer .endOfContent"),
@@ -135,21 +148,21 @@ async function runSmokeTests(browser, base) {
         console.log(page.url(), errors, [...assets]);
         throw error;
       }
-      await page.waitForSelector(".page .canvasWrapper canvas", {
+      await viewer.waitForSelector(".page .canvasWrapper canvas", {
         visible: true,
       });
       assert(
-        page.url().startsWith(prefix + "/"),
+        viewer.url().startsWith(prefix + "/"),
         "Chrome did not route the PDF to the extension."
       );
       assert.equal(
-        await page.evaluate(
+        await viewer.evaluate(
           () => window.PDFViewerApplication.pdfViewer.currentScaleValue
         ),
         "page-width"
       );
       assert.equal(
-        await page.evaluate(() => window.pdfjsLib.version),
+        await viewer.evaluate(() => window.pdfjsLib.version),
         "6.5.438"
       );
       assert(
@@ -168,15 +181,16 @@ async function runSmokeTests(browser, base) {
         [...assets].some(item => item.includes("/standard_fonts/")),
         "No bundled standard fonts were requested."
       );
-      assert.deepEqual(await page.evaluate(() => window.cspViolations), []);
+      assert.deepEqual(await viewer.evaluate(() => window.cspViolations), []);
       if (kind === "local") {
+        assert.equal(page.url(), file);
         assert(
           ![...assets].some(item => /^https?:/.test(item)),
           "The offline viewer attempted an HTTP request."
         );
       }
       assert.deepEqual(errors, []);
-      await page.click("#downloadButton");
+      await viewer.click("#downloadButton");
       let downloaded;
       for (let i = 0; i < 50; i++) {
         downloaded = (await readdir(downloads)).find(name =>
@@ -317,14 +331,17 @@ async function runSmokeTests(browser, base) {
         throw error;
       }
     });
-    await scripts.waitForFunction(
+    const scriptsViewer = await scripts.waitForFrame(frame =>
+      frame.url().startsWith(prefix + "/")
+    );
+    await scriptsViewer.waitForFunction(
       () => window.PDFViewerApplication?.scriptingReady === true
     );
     const inputSelector = '[data-element-id="55R"]';
     const outputSelector = '[data-element-id="56R"]';
-    await scripts.type(inputSelector, "1 + 1");
-    await scripts.click('[data-annotation-id="57R"]');
-    await scripts.waitForFunction(
+    await scriptsViewer.type(inputSelector, "1 + 1");
+    await scriptsViewer.click('[data-annotation-id="57R"]');
+    await scriptsViewer.waitForFunction(
       selector => document.querySelector(selector)?.value === "2",
       {},
       outputSelector

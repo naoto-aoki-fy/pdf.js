@@ -19,9 +19,11 @@ npm ci --ignore-scripts
 ## Getting Started
 
 Run `npx gulp build`. Open `chrome://extensions`, enable **Developer mode**,
-choose **Load unpacked**, and select `build/chromium/`. Open an HTTP or HTTPS
-PDF in Chrome to use the viewer. For local PDFs, open the extension's details
-and enable **Allow access to file URLs**.
+choose **Load unpacked**, and select `build/chromium/`. Click the extension's
+toolbar icon to open the viewer and select or drop a PDF. To open PDFs
+automatically, enable **Open PDFs automatically in PDF Viewer** in the extension
+options. To open `file:` URLs automatically, enable **Allow access to file URLs**
+in the extension's details.
 
 ## Building
 
