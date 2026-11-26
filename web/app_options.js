@@ -609,6 +609,14 @@ const defaultOptions = new Map([
               OptionKind.EVENT_DISPATCH,
           },
         ],
+        [
+          "openPdfAutomatically",
+          {
+            /** @type {boolean} */
+            value: false,
+            kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
+          },
+        ],
       ]
     : []),
   [
