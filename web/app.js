@@ -39,6 +39,7 @@ import {
   SidebarView,
   SpreadMode,
   TextLayerMode,
+  toggleCheckedBtn,
 } from "./ui_utils.js";
 import {
   AnnotationEditorType,
@@ -2693,6 +2694,57 @@ const PDFViewerApplication = {
     if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")) {
       eventBus.on("fileinputchange", onFileInputChange.bind(this), opts);
       eventBus.on("openfile", onOpenFile.bind(this), opts);
+    }
+    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")) {
+      const { viewerContainer, secondaryToolbar } = this.appConfig;
+      const button = secondaryToolbar?.invertPdfBrightnessButton;
+      const updateBrightness = value => {
+        viewerContainer.classList.toggle("invertPdfBrightness", value);
+        if (button) {
+          toggleCheckedBtn(button, value);
+        }
+      };
+      updateBrightness(AppOptions.get("invertPdfBrightness"));
+      eventBus.on(
+        "invertpdfbrightness",
+        ({ value }) => updateBrightness(value),
+        opts
+      );
+      eventBus.on(
+        "togglepdfbrightness",
+        () =>
+          preferences.set(
+            "invertPdfBrightness",
+            !AppOptions.get("invertPdfBrightness")
+          ),
+        opts
+      );
+
+      const subpixelButton = secondaryToolbar?.disableSubpixelRenderingButton;
+      const updateSubpixelButton = value => {
+        if (subpixelButton) {
+          subpixelButton.classList.toggle("toggled", value);
+          subpixelButton.ariaPressed = String(value);
+        }
+      };
+      updateSubpixelButton(AppOptions.get("disableSubpixelRendering"));
+      eventBus.on(
+        "disablesubpixelrendering",
+        ({ value }) => {
+          updateSubpixelButton(value);
+          this.pdfViewer.invalidatePageCanvases();
+        },
+        opts
+      );
+      eventBus.on(
+        "togglesubpixelrendering",
+        () =>
+          preferences.set(
+            "disableSubpixelRendering",
+            !AppOptions.get("disableSubpixelRendering")
+          ),
+        opts
+      );
     }
     if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
       eventBus.on(
