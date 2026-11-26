@@ -29,11 +29,14 @@ async function getAutomaticPdfOpening() {
       return prefs[pdfOpeningPref] === true;
     }
   } catch (error) {
-    console.error("Failed to read the automatic PDF opening preference.", error);
+    console.error(
+      "Failed to read the automatic PDF opening preference.",
+      error
+    );
     return false;
   }
 
-  // Managed storage can be unavailable when there are no administrator policies.
+  // Managed storage can be unavailable without administrator policies.
   const managed = chrome.storage.managed;
   const prefs = await managed?.get(pdfOpeningPref).catch(() => null);
   return prefs?.[pdfOpeningPref] === true;

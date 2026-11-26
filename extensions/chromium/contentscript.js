@@ -37,7 +37,10 @@ document.addEventListener("animationstart", onAnimationStart, true);
 if (document.contentType === "application/pdf") {
   isAutomaticPdfOpeningEnabled().then(enabled => {
     if (enabled) {
-      chrome.runtime.sendMessage({ action: "canRequestBody" }, maybeRenderPdfDoc);
+      chrome.runtime.sendMessage(
+        { action: "canRequestBody" },
+        maybeRenderPdfDoc
+      );
     }
   });
 }
@@ -118,7 +121,7 @@ function watchObjectOrEmbed(elem) {
       updateEmbedOrObject(elem);
     } else if (restoreElement) {
       // The site changed the source after automatic opening was turned off.
-      // Restore Chrome's rendering for the new PDF without reloading existing PDFs.
+      // Restore Chrome's rendering for the new PDF without reloading others.
       restoreElement();
       restoreElement = undefined;
     }
