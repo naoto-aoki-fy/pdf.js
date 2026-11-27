@@ -163,7 +163,7 @@ jobs:
           manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
           archive = temp / zip_name(tag)
-          with ZipFile(archive, "x", ZIP_DEFLATED, strict_timestamps=False) as zip_file:
+          with ZipFile(archive, "x", ZIP_DEFLATED, compresslevel=9, strict_timestamps=False) as zip_file:
               for path in sorted(extension.rglob("*")):
                   zip_file.write(path, path.relative_to(extension))
           with ZipFile(archive) as zip_file:
