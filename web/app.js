@@ -1498,6 +1498,7 @@ const PDFViewerApplication = {
     this.baseUrl = "";
     this._downloadUrl = "";
     this._isMergedDocument = false;
+    delete this._mergedDocumentNeedsSaving;
     this.documentInfo = null;
     this.metadata = null;
     this._contentDispositionFilename = null;
@@ -1530,9 +1531,11 @@ const PDFViewerApplication = {
    * @param {object} args - Accepts any/all of the properties from
    *   {@link DocumentInitParameters}, and also an `originalUrl` string.
    * @param {File} [args.file] - A local PDF selected in the viewer.
+   * @param {string} [args.mergedDocumentDownloadUrl] - The download URL to keep
+   *   when reopening a document after merging pages.
    * @returns {Promise} - Promise that is resolved when the document is opened.
    */
-  async open({ file, ...args }) {
+  async open({ file, mergedDocumentDownloadUrl = null, ...args }) {
     const openId = ++this._openId;
     const { emptyViewerOpenButton } = this.appConfig;
     if (emptyViewerOpenButton) {
@@ -1555,7 +1558,11 @@ const PDFViewerApplication = {
     try {
       if (localFileUrl) {
         args.url = localFileUrl;
-        this.setTitleUsingUrl(localFileUrl, localFileUrl, file.name);
+        this.setTitleUsingUrl(
+          sourceUrl || localFileUrl,
+          localFileUrl,
+          file.name
+        );
       } else if (args.data && isPdfFile(args.filename)) {
         this._contentDispositionFilename = args.filename;
       } else if (
@@ -1618,6 +1625,11 @@ const PDFViewerApplication = {
           (typeof PDFJSDev === "undefined" ||
             PDFJSDev.test("GENERIC || CHROME")) &&
           this._updateDocumentUrl(file, sourceUrl);
+        if (mergedDocumentDownloadUrl !== null) {
+          this._downloadUrl = mergedDocumentDownloadUrl;
+          this._isMergedDocument = true;
+          this._mergedDocumentNeedsSaving = true;
+        }
         this.load(pdfDocument, resetHistory);
       },
       reason => {
@@ -3020,29 +3032,29 @@ const PDFViewerApplication = {
   },
 
   async onSaveAndLoad({ data: { pageInfos, copyLevels } }) {
-    if (!this.pdfDocument) {
+    const { pdfDocument, _openId: openId } = this;
+    if (!pdfDocument) {
       return;
     }
-    const modifiedPdfBytes = await this.pdfDocument.extractPages(
+    const modifiedPdfBytes = await pdfDocument.extractPages(
       pageInfos,
       copyLevels
     );
+    if (pdfDocument !== this.pdfDocument || openId !== this._openId) {
+      return;
+    }
     if (!modifiedPdfBytes) {
       console.error(
         "Something wrong happened when saving the edited PDF.\nPlease file a bug."
       );
       return;
     }
-    this._mergedDocumentNeedsSaving = true;
-
     // Keep the original download URL when reopening the merged PDF.
-    const downloadUrl = this._downloadUrl;
     await this.open({
       data: modifiedPdfBytes,
       filename: this._docFilename,
+      mergedDocumentDownloadUrl: this._downloadUrl,
     });
-    this._downloadUrl = downloadUrl;
-    this._isMergedDocument = true;
   },
 
   _accumulateTicks(ticks, prop) {

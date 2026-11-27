@@ -133,6 +133,39 @@ describe("PDF viewer", () => {
     );
   });
 
+  it("keeps a newly opened PDF when an older edit finishes", async () => {
+    const pages = await loadAndWait("empty.pdf", ".textLayer .endOfContent");
+    try {
+      await Promise.all(
+        pages.map(async ([name, page]) => {
+          const keptDocument = await page.evaluate(async () => {
+            const app = window.PDFViewerApplication;
+            const data = await app.pdfDocument.getData();
+            const { promise, resolve } = Promise.withResolvers();
+            app.pdfDocument.extractPages = () => promise;
+
+            const edit = app.onSaveAndLoad({ data: {} });
+            await app.open({
+              file: new File([data], "replacement.pdf", {
+                type: "application/pdf",
+              }),
+            });
+            const replacement = app.pdfDocument;
+            resolve(data);
+            await edit;
+            return app.pdfDocument === replacement;
+          });
+          expect(keptDocument).withContext(`In ${name}`).toBeTrue();
+          expect(new URL(page.url()).searchParams.get("file"))
+            .withContext(`In ${name}`)
+            .toBe("replacement.pdf");
+        })
+      );
+    } finally {
+      await closePages(pages);
+    }
+  });
+
   describe("EFOpen attachments", () => {
     let pages;
 
