@@ -133,6 +133,67 @@ describe("PDF viewer", () => {
     );
   });
 
+  it("reopens the original URL after displaying a selected file", async () => {
+    await Promise.all(
+      global.integrationSessions.map(async ({ name, browser }) => {
+        const page = await browser.newPage();
+        try {
+          const url = new URL(global.integrationBaseUrl);
+          url.searchParams.set("file", "previous.pdf");
+          url.searchParams.set("local", "1");
+          const originalUrl = new URL("/test/pdfs/basicapi.pdf", url).href;
+          await page.goto(url.href);
+          await page.waitForSelector("#emptyViewerOpenButton", {
+            visible: true,
+          });
+
+          const file = await page.evaluateHandle(async source => {
+            const response = await fetch(source);
+            return new File([await response.blob()], "selected.pdf", {
+              type: "application/pdf",
+            });
+          }, originalUrl);
+          let originalRequests = 0;
+          page.on("request", request => {
+            if (request.url() === originalUrl) {
+              originalRequests++;
+            }
+          });
+          await page.evaluate(
+            (selectedFile, source) =>
+              window.PDFViewerApplication.open({
+                file: selectedFile,
+                originalUrl: source,
+              }),
+            file,
+            originalUrl
+          );
+          await page.waitForSelector(".page canvas", { visible: true });
+          const getFingerprint = () =>
+            window.PDFViewerApplication.pdfDocument.fingerprints[0];
+          const fingerprint = await page.evaluate(getFingerprint);
+          const openedUrl = new URL(page.url());
+          expect(openedUrl.searchParams.get("file"))
+            .withContext(`In ${name}`)
+            .toBe(originalUrl);
+          expect(openedUrl.searchParams.has("local"))
+            .withContext(`In ${name}`)
+            .toBeFalse();
+          expect(originalRequests).withContext(`In ${name}`).toBe(0);
+
+          await page.reload();
+          await page.waitForSelector(".page canvas", { visible: true });
+          expect(originalRequests).withContext(`In ${name}`).toBeGreaterThan(0);
+          expect(await page.evaluate(getFingerprint))
+            .withContext(`In ${name}`)
+            .toBe(fingerprint);
+        } finally {
+          await closeSinglePage(page);
+        }
+      })
+    );
+  });
+
   it("keeps a newly opened PDF when an older edit finishes", async () => {
     const pages = await loadAndWait("empty.pdf", ".textLayer .endOfContent");
     try {
