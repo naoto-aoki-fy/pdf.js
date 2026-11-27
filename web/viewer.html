@@ -752,6 +752,30 @@ See https://github.com/adobe-type-tools/cmap-resources
                         <span data-l10n-id="pdfjs-page-rotate-ccw-button-label"></span>
                       </button>
 
+                      <!--#if GENERIC || CHROME-->
+                      <button
+                        id="invertPdfBrightness"
+                        class="toolbarButton labeled"
+                        type="button"
+                        tabindex="0"
+                        data-l10n-id="pdfjs-invert-pdf-brightness-button"
+                        role="checkbox"
+                        aria-checked="false"
+                      >
+                        <span data-l10n-id="pdfjs-invert-pdf-brightness-button-label"></span>
+                      </button>
+                      <button
+                        id="disableSubpixelRendering"
+                        class="toolbarButton labeled"
+                        type="button"
+                        tabindex="0"
+                        data-l10n-id="pdfjs-disable-subpixel-rendering-button"
+                        aria-pressed="false"
+                      >
+                        <span data-l10n-id="pdfjs-disable-subpixel-rendering-button-label"></span>
+                      </button>
+                      <!--#endif-->
+
                       <div class="horizontalToolbarSeparator"></div>
 
                       <div id="cursorToolButtons" role="radiogroup">
@@ -1355,5 +1379,26 @@ See https://github.com/adobe-type-tools/cmap-resources
     </div>
     <!-- outerContainer -->
     <div id="printContainer"></div>
+    <!-- The PDF brightness filter mirrors HSL lightness using
+         RGB - minimum + (1 - maximum). It computes with opaque RGB,
+         then restores the original alpha. -->
+    <!--#if GENERIC || CHROME-->
+    <svg id="pdfBrightnessFilterDefs" width="0" height="0" aria-hidden="true">
+      <filter id="pdfBrightnessFilter" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
+        <feColorMatrix in="SourceGraphic" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0 1" result="opaque" />
+        <feColorMatrix in="opaque" values="1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 1 0" result="red" />
+        <feColorMatrix in="opaque" values="0 1 0 0 0  0 1 0 0 0  0 1 0 0 0  0 0 0 1 0" result="green" />
+        <feColorMatrix in="opaque" values="0 0 1 0 0  0 0 1 0 0  0 0 1 0 0  0 0 0 1 0" result="blue" />
+        <feBlend in="red" in2="green" mode="darken" result="minRedGreen" />
+        <feBlend in="minRedGreen" in2="blue" mode="darken" result="minimum" />
+        <feBlend in="red" in2="green" mode="lighten" result="maxRedGreen" />
+        <feBlend in="maxRedGreen" in2="blue" mode="lighten" result="maximum" />
+        <feColorMatrix in="maximum" values="-1 0 0 0 1  0 -1 0 0 1  0 0 -1 0 1  0 0 0 1 0" result="oneMinusMaximum" />
+        <feBlend in="opaque" in2="minimum" mode="difference" result="aboveMinimum" />
+        <feComposite in="aboveMinimum" in2="oneMinusMaximum" operator="arithmetic" k2="1" k3="1" />
+        <feComposite in2="SourceAlpha" operator="in" />
+      </filter>
+    </svg>
+    <!--#endif-->
   </body>
 </html>

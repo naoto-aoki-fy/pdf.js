@@ -596,6 +596,32 @@ const defaultOptions = new Map([
       kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
     },
   ],
+  ...(typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")
+    ? [
+        [
+          "disableSubpixelRendering",
+          {
+            /** @type {boolean} */
+            value: false,
+            kind:
+              OptionKind.VIEWER +
+              OptionKind.PREFERENCE +
+              OptionKind.EVENT_DISPATCH,
+          },
+        ],
+        [
+          "invertPdfBrightness",
+          {
+            /** @type {boolean} */
+            value: false,
+            kind:
+              OptionKind.VIEWER +
+              OptionKind.PREFERENCE +
+              OptionKind.EVENT_DISPATCH,
+          },
+        ],
+      ]
+    : []),
   [
     "maxCanvasPixels",
     {
