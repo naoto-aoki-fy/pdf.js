@@ -16,6 +16,7 @@
 import {
   awaitPromise,
   closePages,
+  closeSinglePage,
   createPromise,
   decodePNG,
   getRect,
@@ -30,11 +31,61 @@ import {
   waitForPageRendered,
   waitForTextToBe,
 } from "./test_utils.mjs";
+import { mkdtemp, rm, writeFile } from "fs/promises";
+import os from "os";
 import path from "path";
 
 const __dirname = import.meta.dirname;
 
 describe("PDF viewer", () => {
+  it("can reopen the empty viewer's file picker after canceling or loading an invalid PDF", async () => {
+    await Promise.all(
+      global.integrationSessions.map(async ({ name, browser }) => {
+        const page = await browser.newPage();
+        const tempDir = await mkdtemp(path.join(os.tmpdir(), "pdfjs-empty-"));
+        try {
+          const emptyFile = path.join(tempDir, "zero-byte.pdf");
+          await writeFile(emptyFile, "");
+
+          const button = "#emptyViewerOpenButton";
+          const openPicker = async () => {
+            await page.waitForSelector(button, { visible: true });
+            const [chooser] = await Promise.all([
+              page.waitForFileChooser(),
+              page.click(button),
+            ]);
+            return chooser;
+          };
+
+          await page.goto(`${global.integrationBaseUrl}?file=`);
+          await (await openPicker()).cancel();
+
+          const documentError = await createPromise(page, resolve => {
+            window.PDFViewerApplication.eventBus.on(
+              "documenterror",
+              () => resolve(),
+              { once: true }
+            );
+          });
+          await (await openPicker()).accept([emptyFile]);
+          await awaitPromise(documentError);
+
+          const blankPdf = path.join(__dirname, "../pdfs/empty.pdf");
+          await (await openPicker()).accept([blankPdf]);
+          await page.waitForSelector(".page canvas", { visible: true });
+          expect(await page.$eval(button, element => element.hidden))
+            .withContext(`In ${name}`)
+            .toBeTrue();
+        } finally {
+          await Promise.all([
+            closeSinglePage(page),
+            rm(tempDir, { recursive: true, force: true }),
+          ]);
+        }
+      })
+    );
+  });
+
   describe("EFOpen attachments", () => {
     let pages;
 
