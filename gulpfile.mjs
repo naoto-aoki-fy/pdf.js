@@ -345,7 +345,8 @@ function createWebpackConfig(
     (!bundleDefines.TESTING || bundleDefines.COVERAGE) &&
     !disableSourceMaps;
   const isModule = output.library?.type === "module";
-  const isMinified = bundleDefines.MINIFIED;
+  // Minify Chromium bundles while keeping the filenames used by the viewer.
+  const isMinified = bundleDefines.MINIFIED || bundleDefines.CHROME;
   const skipBabel = bundleDefines.SKIP_BABEL;
 
   const babelExcludeRegExp = [

@@ -1,0 +1,197 @@
+name: Publish Chrome extension
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+permissions: {}
+
+jobs:
+  build:
+    if: github.event_name != 'push' || !github.event.deleted
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      commit: ${{ steps.previous.outputs.commit || steps.checkout.outputs.commit }}
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+    steps:
+      # Keep the original commit even if the branch moved before a full rerun.
+      - name: Find the existing build on reruns
+        if: github.run_attempt != '1'
+        id: previous
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          commit="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+            --paginate --jq '.artifacts[] | select(.expired == false and (.name | test("^chromium-[0-9a-f]{40}$"))) | .name | ltrimstr("chromium-")')"
+          if [ -n "$commit" ]; then
+            [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+            echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout the target commit
+        if: steps.previous.outputs.commit == ''
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        if: steps.previous.outputs.commit == ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          package-manager-cache: false
+
+      - name: Build the extension
+        if: steps.previous.outputs.commit == ''
+        run: |
+          npm ci
+          npx gulp chromium
+          tar -C build/chromium -cf "$RUNNER_TEMP/chromium.tar" .
+
+      - name: Save the build for publishing
+        if: steps.previous.outputs.commit == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: chromium-${{ steps.checkout.outputs.commit }}
+          path: ${{ runner.temp }}/chromium.tar
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    concurrency:
+      group: chrome-extension-release
+      queue: max
+
+    steps:
+      - name: Checkout the built commit for tagging
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
+
+      - name: Download the build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: chromium-${{ needs.build.outputs.commit }}
+          path: ${{ runner.temp }}
+          github-token: ${{ github.token }}
+
+      - name: Package and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile
+
+          git = ["git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
+          commit = os.environ["TARGET_COMMIT"]
+          releases_url = f"repos/{os.environ['GITHUB_REPOSITORY']}/releases"
+          component = r"(0|[1-9][0-9]*)"
+          stable_tag = re.compile(rf"v{component}\.{component}\.{component}")
+
+          def output(*command):
+              return subprocess.check_output(command, text=True)
+
+          def title(tag):
+              return f"PDF.js Chrome Extension {tag}"
+
+          def zip_name(tag):
+              return f"pdfjs-chrome-extension-{tag}.zip"
+
+          release_pages = json.loads(output(
+              "gh", "api", "--paginate", "--slurp", f"{releases_url}?per_page=100",
+          ))
+          # Use the remote tags, including peeled values for annotated tags.
+          refs = {}
+          for line in output(*git, "ls-remote", "--tags", "origin").splitlines():
+              sha, ref = line.split("\t")
+              refs[ref.removeprefix("refs/tags/")] = sha
+          versions = {
+              tag: tuple(map(int, match.groups()))
+              for tag in refs if (match := stable_tag.fullmatch(tag))
+          }
+          draft = None
+          for page in release_pages:
+              for release in page:
+                  tag = release["tag_name"]
+                  if tag not in versions or refs.get(f"{tag}^{{}}", refs[tag]) != commit:
+                      continue
+                  if release["draft"]:
+                      if draft is None and release["name"] == title(tag):
+                          draft = release
+                  elif any(
+                      asset["name"] == zip_name(tag) and asset["state"] == "uploaded"
+                      for asset in release["assets"]
+                  ):
+                      print(f"{tag} already contains the extension for {commit}.")
+                      raise SystemExit(0)
+
+          if draft:
+              tag = draft["tag_name"]
+          else:
+              major, minor, patch = max(versions.values(), default=(0, 0, 0))
+              tag = f"v{major}.{minor}.{patch + 1}"
+
+          version = tag[1:]
+          if any(int(part) > 65535 for part in version.split(".")):
+              raise SystemExit(f"Chrome version components must be at most 65535: {version}")
+
+          temp = Path(os.environ["RUNNER_TEMP"])
+          extension = temp / "chromium"
+          extension.mkdir()
+          subprocess.run(["tar", "-xf", temp / "chromium.tar", "-C", extension], check=True)
+          manifest_path = extension / "manifest.json"
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          manifest["version"] = version
+          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+          archive = temp / zip_name(tag)
+          with ZipFile(archive, "x", ZIP_DEFLATED, compresslevel=9, strict_timestamps=False) as zip_file:
+              for path in sorted(extension.rglob("*")):
+                  zip_file.write(path, path.relative_to(extension))
+          with ZipFile(archive) as zip_file:
+              if zip_file.testzip() is not None:
+                  raise SystemExit(f"Invalid ZIP: {archive}")
+              if json.loads(zip_file.read("manifest.json"))["version"] != version:
+                  raise SystemExit(f"Manifest version does not match {tag}")
+              names = set(zip_file.namelist())
+              for path in (
+                  "content/web/viewer.html",
+                  "content/web/viewer.mjs",
+                  "content/build/pdf.mjs",
+                  "content/build/pdf.worker.mjs",
+              ):
+                  if path not in names or not zip_file.getinfo(path).file_size:
+                      raise SystemExit(f"Missing or empty viewer file: {path}")
+
+          if draft is None:
+              subprocess.run([*git, "push", "origin", f"{commit}:refs/tags/{tag}"], check=True)
+              draft = json.loads(output(
+                  "gh", "api", "--method", "POST", releases_url, "-f", f"tag_name={tag}",
+                  "-f", f"name={title(tag)}", "-F", "draft=true",
+              ))
+          # A failed upload leaves the draft in place. Clobber also replaces
+          # any incomplete asset left by a previous upload attempt.
+          subprocess.run(["gh", "release", "upload", tag, archive, "--clobber"], check=True)
+          release = json.loads(output(
+              "gh", "api", "--method", "PATCH", f"{releases_url}/{draft['id']}", "-F", "draft=false",
+          ))
+          print(release["html_url"])
+          PY
