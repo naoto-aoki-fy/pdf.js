@@ -438,7 +438,8 @@ class ExternalServices extends BaseExternalServices {
   createScripting() {
     return new GenericScripting(
       AppOptions.get("sandboxBundleSrc"),
-      AppOptions.get("wasmUrl")
+      // The address bar uses the PDF URL, while the viewer's base is fixed.
+      new URL(AppOptions.get("wasmUrl"), document.baseURI).href
     );
   }
 
