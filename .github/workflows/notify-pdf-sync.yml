@@ -1,11 +1,6 @@
 name: Notify PDF sync
 
-on:
-  push:
-    branches: [master]
-    paths:
-      - "test/pdfs/*.pdf"
-      - "test/pdfs/*.pdf.link"
+on: []
 permissions:
   contents: read
 
