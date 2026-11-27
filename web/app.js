@@ -1523,8 +1523,8 @@ const PDFViewerApplication = {
   /**
    * Opens a new PDF document.
    * @param {object} args - Accepts any/all of the properties from
-   *   {@link DocumentInitParameters}, and also an `originalUrl` string or a
-   *   local `file` selected in the viewer.
+   *   {@link DocumentInitParameters}, and also an `originalUrl` string.
+   * @param {File} [args.file] - A local PDF selected in the viewer.
    * @returns {Promise} - Promise that is resolved when the document is opened.
    */
   async open({ file, ...args }) {
@@ -1540,7 +1540,7 @@ const PDFViewerApplication = {
         file &&
         (this.pdfLoadingTask || localFileOpenId !== this._localFileOpenId)
       ) {
-        return; // A newer document was requested during close().
+        return undefined; // A newer document was requested during close().
       }
     }
     // Set the necessary global worker parameters, using the available options.
