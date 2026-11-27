@@ -15,6 +15,8 @@ concurrency:
 jobs:
   build:
     name: Build
+    # This fork publishes the standalone viewer via deploy-viewer-pages.yml.
+    if: github.repository != 'naoto-aoki-fy/pdf.js'
     runs-on: ubuntu-latest
 
     strategy:
