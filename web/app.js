@@ -1666,9 +1666,10 @@ const PDFViewerApplication = {
       // An edited document reopened from bytes keeps its original query.
       return false;
     }
-    const local = !!file || /^blob:/i.test(sourceUrl);
-    const source =
-      file?.name ?? (local ? this._docFilename : String(sourceUrl));
+    const local = !sourceUrl || /^blob:/i.test(sourceUrl);
+    const source = local
+      ? (file?.name ?? this._docFilename)
+      : String(sourceUrl);
     const previous = this._documentUrlSource;
     // A file chosen to satisfy the initial CRX URL keeps its destination.
     const switchedDocument =
