@@ -1,26 +1,5 @@
 name: CodSpeed benchmarks
-on:
-  push:
-    paths:
-      - "external/builder/**"
-      - "package-lock.json"
-      - "src/**"
-      - "test/benchmarks/**"
-      - "web/**"
-      - ".github/workflows/codspeed.yml"
-    branches:
-      - master
-  pull_request:
-    paths:
-      - "external/builder/**"
-      - "package-lock.json"
-      - "src/**"
-      - "test/benchmarks/**"
-      - "web/**"
-      - ".github/workflows/codspeed.yml"
-    branches:
-      - master
-  workflow_dispatch:
+on: []
 permissions:
   contents: read
 

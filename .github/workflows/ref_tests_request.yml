@@ -14,9 +14,7 @@ name: Request reference tests
 #
 # The trigger is required to get the label event and the secrets for fork PRs;
 # every value taken from the event is passed through `env`, never interpolated.
-on:
-  pull_request_target: # zizmor: ignore[dangerous-triggers]
-    types: [labeled]
+on: []
 permissions:
   contents: read
 

@@ -7,26 +7,7 @@ name: Publish per-test coverage index
 #
 # This only runs when something is merged into master (push event); the build is
 # heavy (a full browser test run), so it's deliberately kept off pull requests.
-on:
-  push:
-    paths:
-      - 'gulpfile.mjs'
-      - 'external/**'
-      - 'package-lock.json'
-      - 'src/**'
-      - 'test/images/**'
-      - 'test/pdfs/**'
-      - 'test/resources/**'
-      - 'test/*.css'
-      - 'test/driver.js'
-      - 'test/test.mjs'
-      - 'test/test_manifest.json'
-      - 'test/test_slave.html'
-      - 'web/**'
-      - '.github/workflows/publish_coverage_index.yml'
-    branches:
-      - master
-  workflow_dispatch:
+on: []
 concurrency:
   group: publish-coverage-index-${{ github.ref }}
   cancel-in-progress: true

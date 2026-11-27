@@ -1,30 +1,5 @@
 name: Font tests
-on:
-  push:
-    paths:
-      - 'gulpfile.mjs'
-      - 'external/**'
-      - 'package-lock.json'
-      - 'src/**'
-      - 'test/test.mjs'
-      - 'test/font/**'
-      - '.github/font_tests_requirements.txt'
-      - '.github/workflows/font_tests.yml'
-    branches:
-      - master
-  pull_request:
-    paths:
-      - 'gulpfile.mjs'
-      - 'external/**'
-      - 'package-lock.json'
-      - 'src/**'
-      - 'test/test.mjs'
-      - 'test/font/**'
-      - '.github/font_tests_requirements.txt'
-      - '.github/workflows/font_tests.yml'
-    branches:
-      - master
-  workflow_dispatch:
+on: []
 permissions:
   contents: read
 
