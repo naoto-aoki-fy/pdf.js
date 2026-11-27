@@ -2626,11 +2626,8 @@ const PDFViewerApplication = {
           ),
         opts
       );
-    }
 
-    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")) {
-      const subpixelButton =
-        this.appConfig.secondaryToolbar?.disableSubpixelRenderingButton;
+      const subpixelButton = secondaryToolbar?.disableSubpixelRenderingButton;
       const updateSubpixelButton = value => {
         if (subpixelButton) {
           subpixelButton.classList.toggle("toggled", value);

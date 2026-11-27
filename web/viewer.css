@@ -1255,9 +1255,7 @@ dialog :link {
     #invertPdfBrightness::before {
       mask-image: url(images/secondaryToolbarButton-invertPdfBrightness.svg);
     }
-    /*#endif*/
 
-    /*#if CHROME*/
     #disableSubpixelRendering::before {
       mask-image: var(--toolbarButton-editorFreeText-icon);
     }

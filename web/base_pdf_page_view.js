@@ -114,8 +114,7 @@ class BasePDFPageView extends RenderableView {
 
   get #useAlphaCanvas() {
     return (
-      typeof PDFJSDev !== "undefined" &&
-      PDFJSDev.test("CHROME") &&
+      (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")) &&
       AppOptions.get("disableSubpixelRendering")
     );
   }

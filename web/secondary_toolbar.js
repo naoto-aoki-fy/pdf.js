@@ -49,7 +49,7 @@ import { PagesCountLimit } from "./pdf_viewer.js";
  * @property {HTMLButtonElement} [invertPdfBrightnessButton] - Button to toggle
  *   PDF page brightness inversion.
  * @property {HTMLButtonElement} [disableSubpixelRenderingButton] - Button to
- *   disable subpixel text rendering in the Chrome extension.
+ *   disable subpixel text rendering.
  * @property {HTMLButtonElement} cursorSelectToolButton - Button to enable the
  *   select tool.
  * @property {HTMLButtonElement} cursorHandToolButton - Button to enable the
@@ -170,8 +170,6 @@ class SecondaryToolbar {
           close: false,
         });
       }
-    }
-    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")) {
       if (options.disableSubpixelRenderingButton) {
         buttons.push({
           element: options.disableSubpixelRenderingButton,

@@ -111,7 +111,7 @@ function getViewerConfiguration() {
           ? document.getElementById("invertPdfBrightness")
           : null,
       disableSubpixelRenderingButton:
-        typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")
+        typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")
           ? document.getElementById("disableSubpixelRendering")
           : null,
       cursorSelectToolButton: document.getElementById("cursorSelectTool"),
