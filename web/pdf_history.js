@@ -32,6 +32,8 @@ const UPDATE_VIEWAREA_TIMEOUT = 1000; // milliseconds
  * @typedef {object} PDFHistoryOptions
  * @property {PDFLinkService} linkService - The navigation/linking service.
  * @property {EventBus} eventBus - The application event bus.
+ * @property {function(): boolean} [isCurrentDocument] - Whether the address
+ *   bar points to the document whose page history is being managed.
  */
 
 /**
@@ -57,12 +59,15 @@ function getCurrentHash() {
 class PDFHistory {
   #eventAC = null;
 
+  #isCurrentDocument;
+
   /**
    * @param {PDFHistoryOptions} options
    */
-  constructor({ linkService, eventBus }) {
+  constructor({ linkService, eventBus, isCurrentDocument = null }) {
     this.linkService = linkService;
     this.eventBus = eventBus;
+    this.#isCurrentDocument = isCurrentDocument;
 
     this._initialized = false;
     this._fingerprint = "";
@@ -370,6 +375,9 @@ class PDFHistory {
   }
 
   #pushOrReplaceState(destination, forceReplace = false) {
+    if (this.#isCurrentDocument?.() === false) {
+      return;
+    }
     const shouldReplace = forceReplace || !this._destination;
     const newState = {
       fingerprint: this._fingerprint,
@@ -588,6 +596,9 @@ class PDFHistory {
   }
 
   #popState({ state }) {
+    if (this.#isCurrentDocument?.() === false) {
+      return;
+    }
     const newHash = getCurrentHash(),
       hashChanged = this._currentHash !== newHash;
     this._currentHash = newHash;

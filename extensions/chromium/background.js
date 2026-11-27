@@ -18,9 +18,17 @@ limitations under the License.
 
 importScripts(
   "options/migration.js",
+  "pdf-opening-preference.js",
   "preserve-referer.js",
   "pdfHandler.js",
   "extension-router.js",
   "suppress-update.js",
   "telemetry.js"
 );
+
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.create({
+    url: chrome.runtime.getURL("content/web/viewer.html"),
+    active: true,
+  });
+});

@@ -32,31 +32,9 @@ if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("CHROME")) {
   );
 }
 
-(function rewriteUrlClosure() {
-  // Run this code outside DOMContentLoaded to make sure that the URL
-  // is rewritten as soon as possible.
-  const queryString = document.location.search.slice(1);
-  const m = /(?:^|&)file=([^&]*)/.exec(queryString);
-  let defaultUrl = m ? decodeURIComponent(m[1]) : "";
-  if (!defaultUrl && queryString.startsWith("DNR:")) {
-    // Redirected via DNR, see registerPdfRedirectRule in pdfHandler.js.
-    defaultUrl = queryString.slice(4);
-  }
-
-  // Example: chrome-extension://.../http://example.com/file.pdf
-  const humanReadableUrl = "/" + defaultUrl + location.hash;
-  history.replaceState(history.state, "", humanReadableUrl);
-
-  AppOptions.set("defaultUrl", defaultUrl);
-})();
-
 let viewerApp = { initialized: false };
 function initCom(app) {
   viewerApp = app;
-
-  // Ensure that PDFViewerApplication.initialBookmark reflects the current hash,
-  // in case the URL rewrite above results in a different hash.
-  viewerApp.initialBookmark = location.hash.slice(1);
 }
 
 const ChromeCom = {
@@ -85,11 +63,15 @@ const ChromeCom = {
   },
 
   /**
-   * Resolves a PDF file path and attempts to detects length.
+   * Resolves a PDF file URL, prompting for a local file if access is denied.
    * @param {string} file - Absolute URL of PDF file.
-   * @param {Function} callback - A callback with resolved URL and file length.
+   * @param {Function} callback - A callback with the resolved URL.
    */
   resolvePDFFile(file, callback) {
+    // A newer open request takes precedence over the startup URL.
+    const openId = viewerApp._openId;
+    const isCurrent = () => openId === viewerApp._openId;
+
     // Expand drive:-URLs to filesystem URLs (Chrome OS)
     file = file.replace(
       /^drive:/i,
@@ -101,12 +83,17 @@ const ChromeCom = {
       // There is no UI to input a different URL, so this assumption will hold
       // for now.
       setReferer(file, function () {
-        callback(file);
+        if (isCurrent()) {
+          callback(file);
+        }
       });
       return;
     }
     if (/^file?:/.test(file)) {
       getEmbedderOrigin(function (origin) {
+        if (!isCurrent()) {
+          return;
+        }
         // If the origin cannot be determined, let Chrome decide whether to
         // allow embedding files. Otherwise, only allow local files to be
         // embedded from local files or Chrome extensions.
@@ -121,10 +108,21 @@ const ChromeCom = {
           return;
         }
         isAllowedFileSchemeAccess(function (isAllowedAccess) {
+          if (!isCurrent()) {
+            return;
+          }
           if (isAllowedAccess) {
             callback(file);
           } else {
-            requestAccessToLocalFile(file, viewerApp.overlayManager, callback);
+            requestAccessToLocalFile(
+              file,
+              viewerApp.overlayManager,
+              (localFile, originalUrl) => {
+                if (isCurrent()) {
+                  viewerApp.open({ file: localFile, originalUrl });
+                }
+              }
+            );
           }
         });
       });
@@ -227,8 +225,8 @@ function requestAccessToLocalFile(fileUrl, overlayManager, callback) {
       const file = this.files[0];
       if (file) {
         const originalFilename = decodeURIComponent(fileUrl.split("/").pop());
-        let originalUrl = fileUrl;
-        if (originalFilename !== file.name) {
+        const matchesOriginal = originalFilename === file.name;
+        if (!matchesOriginal) {
           const msg =
             "The selected file does not match the original file." +
             "\nOriginal: " +
@@ -241,11 +239,8 @@ function requestAccessToLocalFile(fileUrl, overlayManager, callback) {
             this.value = "";
             return;
           }
-          // There is no way to retrieve the original URL from the File object.
-          // So just generate a fake path.
-          originalUrl = "file:///fakepath/to/" + encodeURIComponent(file.name);
         }
-        callback(URL.createObjectURL(file), file.size, originalUrl);
+        callback(file, matchesOriginal ? fileUrl : null);
         overlayManager.close(dialog);
       }
     };
@@ -314,8 +309,6 @@ function setReferer(url, callback) {
  */
 class DownloadManager extends GenericDownloadManager {
   _getOpenDataUrl(blobUrl, filename, dest = null) {
-    // In the Chrome extension, the URL is rewritten using the history API
-    // in viewer.js, so an absolute URL must be generated.
     let url =
       chrome.runtime.getURL("/content/web/viewer.html") +
       "?file=" +
@@ -422,13 +415,10 @@ class Preferences extends BasePreferences {
 }
 
 class ExternalServices extends BaseExternalServices {
-  initPassiveLoading() {
-    ChromeCom.resolvePDFFile(
-      AppOptions.get("defaultUrl"),
-      function (url, length, originalUrl) {
-        viewerApp.open({ url, length, originalUrl });
-      }
-    );
+  initPassiveLoading(file) {
+    ChromeCom.resolvePDFFile(file, url => {
+      viewerApp.open({ url, originalUrl: file });
+    });
   }
 
   async createL10n() {

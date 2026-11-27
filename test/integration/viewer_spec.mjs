@@ -16,6 +16,7 @@
 import {
   awaitPromise,
   closePages,
+  closeSinglePage,
   createPromise,
   decodePNG,
   getRect,
@@ -30,11 +31,202 @@ import {
   waitForPageRendered,
   waitForTextToBe,
 } from "./test_utils.mjs";
+import { copyFile, mkdtemp, rm, writeFile } from "fs/promises";
+import os from "os";
 import path from "path";
 
 const __dirname = import.meta.dirname;
 
 describe("PDF viewer", () => {
+  it("keeps the last successful local filename through reload and reselection", async () => {
+    await Promise.all(
+      global.integrationSessions.map(async ({ name, browser }) => {
+        const page = await browser.newPage();
+        const tempDir = await mkdtemp(path.join(os.tmpdir(), "pdfjs-empty-"));
+        try {
+          const emptyFile = path.join(tempDir, "zero-byte.pdf");
+          await writeFile(emptyFile, "");
+          const pickedName = "レポート #1 & 2.pdf";
+          const pickedFile = path.join(tempDir, pickedName);
+          await copyFile(path.join(__dirname, "../pdfs/empty.pdf"), pickedFile);
+
+          const button = "#emptyViewerOpenButton";
+          const openPicker = async () => {
+            await page.waitForSelector(button, { visible: true });
+            const [chooser] = await Promise.all([
+              page.waitForFileChooser(),
+              page.click(button),
+            ]);
+            return chooser;
+          };
+
+          const sample = "compressed.tracemonkey-pldi-09.pdf";
+          const droppedName = "次の PDF #3 & 4.pdf";
+          const namedFileRequests = [];
+          page.on("request", request => {
+            const { pathname } = new URL(request.url());
+            if (
+              pathname.endsWith(`/${sample}`) ||
+              decodeURIComponent(pathname).endsWith(`/${droppedName}`)
+            ) {
+              namedFileRequests.push(request.url());
+            }
+          });
+          const initialUrl = `${global.integrationBaseUrl}?file=${sample}&local=1&keep=yes#page=2`;
+          await page.goto(initialUrl);
+          await (await openPicker()).cancel();
+          expect(page.url()).withContext(`In ${name}`).toBe(initialUrl);
+
+          const documentError = await createPromise(page, resolve => {
+            window.PDFViewerApplication.eventBus.on(
+              "documenterror",
+              () => resolve(),
+              { once: true }
+            );
+          });
+          await (await openPicker()).accept([emptyFile]);
+          await awaitPromise(documentError);
+          expect(page.url()).withContext(`In ${name}`).toBe(initialUrl);
+
+          await (await openPicker()).accept([pickedFile]);
+          await page.waitForSelector(".page canvas", { visible: true });
+          expect(await page.$eval(button, element => element.hidden))
+            .withContext(`In ${name}`)
+            .toBeTrue();
+          const pickedUrl = new URL(page.url());
+          expect(pickedUrl.searchParams.get("file")).toBe(pickedName);
+          expect(pickedUrl.searchParams.get("local")).toBe("1");
+          expect(pickedUrl.searchParams.get("keep")).toBe("yes");
+          expect(pickedUrl.hash).toBe("");
+
+          const historyLength = await page.evaluate(() => history.length);
+          await page.evaluate(async filename => {
+            const app = window.PDFViewerApplication;
+            const contents = await app.pdfDocument.getData();
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(
+              new File([contents], filename, { type: "application/pdf" })
+            );
+            app.appConfig.mainContainer.dispatchEvent(
+              new DragEvent("drop", { bubbles: true, dataTransfer })
+            );
+          }, droppedName);
+          await page.waitForFunction(
+            filename =>
+              new URLSearchParams(location.search).get("file") === filename,
+            {},
+            droppedName
+          );
+          expect(await page.evaluate(() => history.length)).toBe(historyLength);
+          const droppedUrl = page.url();
+          await page.reload();
+          await page.waitForSelector(button, { visible: true });
+          expect(page.url()).toBe(droppedUrl);
+          expect(namedFileRequests).toEqual([]);
+        } finally {
+          await Promise.all([
+            closeSinglePage(page),
+            rm(tempDir, { recursive: true, force: true }),
+          ]);
+        }
+      })
+    );
+  });
+
+  it("keeps a newly opened PDF when an older edit finishes", async () => {
+    const pages = await loadAndWait("empty.pdf", ".textLayer .endOfContent");
+    try {
+      await Promise.all(
+        pages.map(async ([name, page]) => {
+          const keptDocument = await page.evaluate(async () => {
+            const app = window.PDFViewerApplication;
+            const data = await app.pdfDocument.getData();
+            const { promise, resolve } = Promise.withResolvers();
+            app.pdfDocument.extractPages = () => promise;
+
+            const edit = app.onSaveAndLoad({ data: {} });
+            await app.open({
+              file: new File([data], "replacement.pdf", {
+                type: "application/pdf",
+              }),
+            });
+            const replacement = app.pdfDocument;
+            resolve(data);
+            await edit;
+            return app.pdfDocument === replacement;
+          });
+          expect(keptDocument).withContext(`In ${name}`).toBeTrue();
+          expect(new URL(page.url()).searchParams.get("file"))
+            .withContext(`In ${name}`)
+            .toBe("replacement.pdf");
+        })
+      );
+    } finally {
+      await closePages(pages);
+    }
+  });
+
+  it("restores the document source when traversing earlier page history", async () => {
+    await Promise.all(
+      global.integrationSessions.map(async ({ name, browser }) => {
+        const page = await browser.newPage();
+        try {
+          const source = "/test/pdfs/tracemonkey.pdf";
+          const url = new URL(global.integrationBaseUrl);
+          url.searchParams.set("file", source);
+          url.hash = "page=2";
+          const waitForPage = number =>
+            page.waitForFunction(
+              expectedPage => {
+                const app = window.PDFViewerApplication;
+                return app?.isInitialViewSet && app.page === expectedPage;
+              },
+              {},
+              number
+            );
+
+          await page.goto(url.href);
+          await waitForPage(2);
+          await page.evaluate(() => {
+            window.PDFViewerApplication.pdfLinkService.goToPage(3);
+          });
+          await waitForPage(3);
+          const historyLength = await page.evaluate(() => history.length);
+          const localUrl = await page.evaluate(async () => {
+            const app = window.PDFViewerApplication;
+            const data = await app.pdfDocument.getData();
+            await app.open({
+              file: new File([data], "replacement.pdf", {
+                type: "application/pdf",
+              }),
+            });
+            return location.href;
+          });
+          await page.waitForFunction(
+            () => window.PDFViewerApplication?.isInitialViewSet
+          );
+          expect(await page.evaluate(() => history.length))
+            .withContext(`In ${name}`)
+            .toBe(historyLength);
+
+          await page.goBack();
+          await waitForPage(2);
+          expect(await page.evaluate(() => window.PDFViewerApplication.url))
+            .withContext(`In ${name}`)
+            .toBe(source);
+
+          await page.goForward();
+          await page.waitForSelector("#emptyViewerOpenButton", {
+            visible: true,
+          });
+          expect(page.url()).withContext(`In ${name}`).toBe(localUrl);
+        } finally {
+          await closeSinglePage(page);
+        }
+      })
+    );
+  });
+
   describe("EFOpen attachments", () => {
     let pages;
 
@@ -1689,6 +1881,15 @@ describe("PDF viewer", () => {
           expect(pdfUrl)
             .withContext(`In ${browserName}`)
             .toBe("/test/pdfs/basicapi.pdf?token=%2Ffoo");
+          expect(new URL(page.url()).searchParams.get("file"))
+            .withContext(`In ${browserName}`)
+            .toBe(pdfUrl);
+
+          await page.reload();
+          await page.waitForSelector(".textLayer .endOfContent");
+          expect(await page.evaluate(() => window.PDFViewerApplication.url))
+            .withContext(`In ${browserName}`)
+            .toBe(pdfUrl);
         })
       );
     });
