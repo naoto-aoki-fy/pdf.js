@@ -1035,7 +1035,6 @@ const PDFViewerApplication = {
       // than a fragment separator, since the viewer takes its own hash
       // parameters from the *viewer* URL (issue 19990).
       file = URL.parse(file)?.href ?? file.replaceAll("#", "%23");
-      validateFileURL(file);
     } else if (PDFJSDev.test("MOZCENTRAL")) {
       file = window.location.href;
     } else if (PDFJSDev.test("CHROME")) {
@@ -1060,19 +1059,20 @@ const PDFViewerApplication = {
           fileInput: evt.target,
         });
       });
+      const { emptyViewerOpenButton } = appConfig;
+      emptyViewerOpenButton?.addEventListener(
+        "click",
+        () => eventBus.dispatch("openfile", { source: emptyViewerOpenButton }),
+        { signal: this._globalAbortController.signal }
+      );
     }
 
     if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")) {
-      const { emptyViewerOpenButton } = appConfig;
-      const { signal } = this._globalAbortController;
-      emptyViewerOpenButton.addEventListener(
-        "click",
-        () => eventBus.dispatch("openfile", { source: emptyViewerOpenButton }),
-        { signal }
-      );
-
       // Handle local file drops over the toolbar as well as the PDF pages.
-      const dropOptions = { capture: true, signal };
+      const dropOptions = {
+        capture: true,
+        signal: this._globalAbortController.signal,
+      };
       window.addEventListener(
         "dragover",
         evt => {
@@ -1161,15 +1161,17 @@ const PDFViewerApplication = {
       this.supportsIntegratedFind
     );
 
-    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
-      if (file) {
-        this.open({ url: file });
-      } else {
-        this._hideViewBookmark();
-      }
-    } else if (PDFJSDev.test("CHROME") && !file) {
+    if (
+      (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")) &&
+      !file
+    ) {
       this._hideViewBookmark();
-      appConfig.emptyViewerOpenButton.hidden = false;
+      if (appConfig.emptyViewerOpenButton) {
+        appConfig.emptyViewerOpenButton.hidden = false;
+      }
+    } else if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
+      validateFileURL(file);
+      this.open({ url: file });
     } else if (PDFJSDev.test("MOZCENTRAL || CHROME")) {
       this.setTitleUsingUrl(file, /* downloadUrl = */ file);
 

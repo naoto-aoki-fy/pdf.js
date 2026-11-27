@@ -370,7 +370,7 @@ body {
   z-index: 0;
 }
 
-/*#if CHROME*/
+/*#if GENERIC || CHROME*/
 #emptyViewerOpenButton {
   position: absolute;
   inset: 50% auto auto 50%;
