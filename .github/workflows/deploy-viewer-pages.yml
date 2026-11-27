@@ -1,0 +1,82 @@
+name: Deploy PDF.js viewer to GitHub Pages
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: deploy-viewer-pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Manual runs can select other refs in the Actions UI.
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+        run: npm ci
+
+      - name: Build the production viewer
+        run: npx --no-install gulp generic
+
+      - name: Prepare and verify the Pages artifact
+        working-directory: build/generic
+        run: |
+          cat > index.html <<'EOF'
+          <!doctype html>
+          <html lang="en">
+            <meta charset="utf-8">
+            <title>PDF.js viewer</title>
+            <script>
+              location.replace("./web/viewer.html" + location.search + location.hash);
+            </script>
+          </html>
+          EOF
+
+          for asset in web/viewer.html build/pdf.worker.mjs web/compressed.tracemonkey-pldi-09.pdf; do
+            if [ ! -s "$asset" ]; then
+              echo "::error::Missing or empty Pages asset: $asset"
+              exit 1
+            fi
+          done
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: build/generic/
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
