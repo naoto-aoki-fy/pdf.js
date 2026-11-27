@@ -181,7 +181,8 @@ const PDFViewerApplication = {
   mlManager: null,
   _downloadUrl: "",
   _localFile: null,
-  _localFileOpenId: 0,
+  _openId: 0,
+  _documentUrlSource: null,
   _isMergedDocument: false,
   _eventBusAC: null,
   _windowAC: null,
@@ -1024,21 +1025,23 @@ const PDFViewerApplication = {
 
     const { appConfig, eventBus } = this;
     let file;
-    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
-      const queryString = document.location.search.substring(1);
-      const params = parseQueryString(queryString);
-      file = params.get("file") ?? AppOptions.get("defaultUrl");
-      // Note that `parseQueryString` has already percent-decoded the parameter,
-      // hence it's used as-is below: re-encoding it would break URLs with e.g.
-      // a query string or a percent-encoded path (issue 20137).
-      // In a relative URL a "#" is assumed to be part of the filename, rather
-      // than a fragment separator, since the viewer takes its own hash
-      // parameters from the *viewer* URL (issue 19990).
-      file = URL.parse(file)?.href ?? file.replaceAll("#", "%23");
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")) {
+      const query = location.search.slice(1);
+      if (
+        typeof PDFJSDev !== "undefined" &&
+        PDFJSDev.test("CHROME") &&
+        query.startsWith("DNR:")
+      ) {
+        // The redirect rule appends the raw PDF URL, including its query.
+        file = query.slice(4);
+      } else {
+        const params = parseQueryString(query);
+        if (params.get("local") !== "1") {
+          file = params.get("file") ?? AppOptions.get("defaultUrl");
+        }
+      }
     } else if (PDFJSDev.test("MOZCENTRAL")) {
       file = window.location.href;
-    } else if (PDFJSDev.test("CHROME")) {
-      file = AppOptions.get("defaultUrl");
     }
 
     if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")) {
@@ -1172,7 +1175,9 @@ const PDFViewerApplication = {
     } else if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       validateFileURL(file);
       this.open({ url: file });
-    } else if (PDFJSDev.test("MOZCENTRAL || CHROME")) {
+    } else if (PDFJSDev.test("CHROME")) {
+      this.externalServices.initPassiveLoading(file);
+    } else if (PDFJSDev.test("MOZCENTRAL")) {
       this.setTitleUsingUrl(file, /* downloadUrl = */ file);
 
       this.externalServices.initPassiveLoading();
@@ -1528,7 +1533,7 @@ const PDFViewerApplication = {
    * @returns {Promise} - Promise that is resolved when the document is opened.
    */
   async open({ file, ...args }) {
-    const localFileOpenId = file ? ++this._localFileOpenId : null;
+    const openId = ++this._openId;
     const { emptyViewerOpenButton } = this.appConfig;
     if (emptyViewerOpenButton) {
       emptyViewerOpenButton.hidden = true;
@@ -1536,10 +1541,7 @@ const PDFViewerApplication = {
     if (this.pdfLoadingTask) {
       // We need to destroy already opened document.
       await this.close();
-      if (
-        file &&
-        (this.pdfLoadingTask || localFileOpenId !== this._localFileOpenId)
-      ) {
+      if (openId !== this._openId) {
         return undefined; // A newer document was requested during close().
       }
     }
@@ -1547,6 +1549,7 @@ const PDFViewerApplication = {
     const workerParams = AppOptions.getAll(OptionKind.WORKER);
     Object.assign(GlobalWorkerOptions, workerParams);
 
+    const sourceUrl = args.originalUrl || args.url;
     const localFileUrl = file ? URL.createObjectURL(file) : null;
     let loadingTask;
     try {
@@ -1559,6 +1562,12 @@ const PDFViewerApplication = {
         (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) &&
         args.url
       ) {
+        if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
+          // In a relative PDF URL, treat "#" as part of the filename. The
+          // viewer gets its own page destination from the outer URL's hash.
+          args.url =
+            URL.parse(args.url)?.href ?? args.url.replaceAll("#", "%23");
+        }
         // The Firefox built-in viewer always calls `setTitleUsingUrl`, before
         // `initPassiveLoading`, and it never provides an `originalUrl` here.
         this.setTitleUsingUrl(
@@ -1602,7 +1611,14 @@ const PDFViewerApplication = {
 
     return loadingTask.promise.then(
       pdfDocument => {
-        this.load(pdfDocument);
+        if (loadingTask !== this.pdfLoadingTask) {
+          return;
+        }
+        const resetHistory =
+          (typeof PDFJSDev === "undefined" ||
+            PDFJSDev.test("GENERIC || CHROME")) &&
+          this._updateDocumentUrl(file, sourceUrl);
+        this.load(pdfDocument, resetHistory);
       },
       reason => {
         if (loadingTask !== this.pdfLoadingTask) {
@@ -1628,6 +1644,51 @@ const PDFViewerApplication = {
         );
       }
     );
+  },
+
+  _updateDocumentUrl(file, sourceUrl) {
+    if (!file && !sourceUrl) {
+      // An edited document reopened from bytes keeps its original query.
+      return false;
+    }
+    const local = !!file || /^blob:/i.test(sourceUrl);
+    const source =
+      file?.name ?? (local ? this._docFilename : String(sourceUrl));
+    const previous = this._documentUrlSource;
+    // A file chosen to satisfy the initial CRX URL keeps its destination.
+    const switchedDocument =
+      previous === null
+        ? !!file && !sourceUrl
+        : !!file || previous.source !== source || previous.local !== local;
+
+    const viewerUrl = new URL(location.href);
+    if (
+      typeof PDFJSDev !== "undefined" &&
+      PDFJSDev.test("CHROME") &&
+      viewerUrl.search.startsWith("?DNR:")
+    ) {
+      viewerUrl.search = "";
+    }
+    // Match the case-insensitive parameter names accepted at startup.
+    for (const key of new Set(viewerUrl.searchParams.keys())) {
+      if (["file", "local"].includes(key.toLowerCase())) {
+        viewerUrl.searchParams.delete(key);
+      }
+    }
+    viewerUrl.searchParams.set("file", source);
+    if (local) {
+      viewerUrl.searchParams.set("local", "1");
+    }
+    if (switchedDocument) {
+      viewerUrl.hash = "";
+      this.initialBookmark = null;
+      delete this.initialRotation;
+    }
+    if (viewerUrl.href !== location.href) {
+      history.replaceState(history.state, "", viewerUrl);
+    }
+    this._documentUrlSource = { source, local };
+    return switchedDocument;
   },
 
   async download() {
@@ -1875,7 +1936,7 @@ const PDFViewerApplication = {
     }
   },
 
-  load(pdfDocument) {
+  load(pdfDocument, resetHistory = false) {
     this.pdfDocument = pdfDocument;
 
     this._printPermissionPromise = new Promise(resolve => {
@@ -1962,11 +2023,15 @@ const PDFViewerApplication = {
         openActionPromise,
       ])
         .then(async ([timeStamp, stored, pageLayout, pageMode, openAction]) => {
+          if (pdfDocument !== this.pdfDocument) {
+            return;
+          }
           const viewOnLoad = AppOptions.get("viewOnLoad");
 
           this._initializePdfHistory({
             fingerprint: pdfDocument.fingerprints[0],
             viewOnLoad,
+            resetHistory,
             initialDest: openAction?.get("dest"),
           });
           const initialBookmark = this.initialBookmark;
@@ -2032,7 +2097,7 @@ const PDFViewerApplication = {
               setTimeout(resolve, FORCE_PAGES_LOADED_TIMEOUT);
             }),
           ]);
-          if (!initialBookmark && !hash) {
+          if (pdfDocument !== this.pdfDocument || (!initialBookmark && !hash)) {
             return;
           }
           if (pdfViewer.hasEqualPageSizes) {
@@ -2366,14 +2431,21 @@ const PDFViewerApplication = {
   /**
    * @private
    */
-  _initializePdfHistory({ fingerprint, viewOnLoad, initialDest = null }) {
+  _initializePdfHistory({
+    fingerprint,
+    viewOnLoad,
+    resetHistory,
+    initialDest,
+  }) {
     if (!this.pdfHistory) {
       return;
     }
     this.pdfHistory.initialize({
       fingerprint,
       resetHistory:
-        viewOnLoad === ViewOnLoad.INITIAL || !!this._mergedDocumentNeedsSaving,
+        resetHistory ||
+        viewOnLoad === ViewOnLoad.INITIAL ||
+        !!this._mergedDocumentNeedsSaving,
       updateUrl: AppOptions.get("historyUpdateUrl"),
     });
 
