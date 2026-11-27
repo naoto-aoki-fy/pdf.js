@@ -1,8 +1,5 @@
 name: Publish website
-on:
-  push:
-    branches:
-      - master
+on: []
 permissions:
   contents: read
 
