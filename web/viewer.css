@@ -1251,11 +1251,13 @@ dialog :link {
       mask-image: var(--secondaryToolbarButton-rotateCw-icon);
     }
 
-    /*#if CHROME*/
+    /*#if GENERIC || CHROME*/
     #invertPdfBrightness::before {
       mask-image: url(images/secondaryToolbarButton-invertPdfBrightness.svg);
     }
+    /*#endif*/
 
+    /*#if CHROME*/
     #disableSubpixelRendering::before {
       mask-image: var(--toolbarButton-editorFreeText-icon);
     }
@@ -1480,7 +1482,7 @@ dialog :link {
   display: none;
 }
 
-/*#if CHROME*/
+/*#if GENERIC || CHROME*/
 #pdfBrightnessFilterDefs {
   position: absolute;
 }

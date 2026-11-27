@@ -107,7 +107,7 @@ function getViewerConfiguration() {
       pageRotateCwButton: document.getElementById("pageRotateCw"),
       pageRotateCcwButton: document.getElementById("pageRotateCcw"),
       invertPdfBrightnessButton:
-        typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")
+        typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")
           ? document.getElementById("invertPdfBrightness")
           : null,
       disableSubpixelRenderingButton:

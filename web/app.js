@@ -2602,7 +2602,7 @@ const PDFViewerApplication = {
       eventBus.on("fileinputchange", onFileInputChange.bind(this), opts);
       eventBus.on("openfile", onOpenFile.bind(this), opts);
     }
-    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")) {
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")) {
       const { viewerContainer, secondaryToolbar } = this.appConfig;
       const button = secondaryToolbar?.invertPdfBrightnessButton;
       const updateBrightness = value => {
@@ -2626,8 +2626,11 @@ const PDFViewerApplication = {
           ),
         opts
       );
+    }
 
-      const subpixelButton = secondaryToolbar?.disableSubpixelRenderingButton;
+    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")) {
+      const subpixelButton =
+        this.appConfig.secondaryToolbar?.disableSubpixelRenderingButton;
       const updateSubpixelButton = value => {
         if (subpixelButton) {
           subpixelButton.classList.toggle("toggled", value);

@@ -47,7 +47,7 @@ import { PagesCountLimit } from "./pdf_viewer.js";
  * @property {HTMLButtonElement} pageRotateCcwButton - Button to rotate the
  *   pages counterclockwise.
  * @property {HTMLButtonElement} [invertPdfBrightnessButton] - Button to toggle
- *   PDF page brightness inversion in the Chrome extension.
+ *   PDF page brightness inversion.
  * @property {HTMLButtonElement} [disableSubpixelRenderingButton] - Button to
  *   disable subpixel text rendering in the Chrome extension.
  * @property {HTMLButtonElement} cursorSelectToolButton - Button to enable the
@@ -162,7 +162,7 @@ class SecondaryToolbar {
         close: true,
       });
     }
-    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")) {
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")) {
       if (options.invertPdfBrightnessButton) {
         buttons.push({
           element: options.invertPdfBrightnessButton,
@@ -170,6 +170,8 @@ class SecondaryToolbar {
           close: false,
         });
       }
+    }
+    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")) {
       if (options.disableSubpixelRenderingButton) {
         buttons.push({
           element: options.disableSubpixelRenderingButton,

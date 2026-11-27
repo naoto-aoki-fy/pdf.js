@@ -609,6 +609,10 @@ const defaultOptions = new Map([
               OptionKind.EVENT_DISPATCH,
           },
         ],
+      ]
+    : []),
+  ...(typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")
+    ? [
         [
           "invertPdfBrightness",
           {
