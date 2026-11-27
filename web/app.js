@@ -183,6 +183,7 @@ const PDFViewerApplication = {
   _localFile: null,
   _openId: 0,
   _documentUrlSource: null,
+  _documentUrlSearch: null,
   _isMergedDocument: false,
   _eventBusAC: null,
   _windowAC: null,
@@ -834,6 +835,7 @@ const PDFViewerApplication = {
       this.pdfHistory = new PDFHistory({
         linkService,
         eventBus,
+        isCurrentDocument: this._isCurrentDocumentUrl.bind(this),
       });
       linkService.setHistory(this.pdfHistory);
     }
@@ -1026,7 +1028,8 @@ const PDFViewerApplication = {
     const { appConfig, eventBus } = this;
     let file;
     if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")) {
-      const query = location.search.slice(1);
+      this._documentUrlSearch = location.search;
+      const query = this._documentUrlSearch.slice(1);
       if (
         typeof PDFJSDev !== "undefined" &&
         PDFJSDev.test("CHROME") &&
@@ -1700,7 +1703,21 @@ const PDFViewerApplication = {
       history.replaceState(history.state, "", viewerUrl);
     }
     this._documentUrlSource = { source, local };
+    this._documentUrlSearch = viewerUrl.search;
     return switchedDocument;
+  },
+
+  _isCurrentDocumentUrl() {
+    const currentSearch = this._documentUrlSearch;
+    if (currentSearch === null || currentSearch === location.search) {
+      return true;
+    }
+    const current = parseQueryString(currentSearch);
+    const target = parseQueryString(location.search);
+    return (
+      current.get("file") === target.get("file") &&
+      (current.get("local") === "1") === (target.get("local") === "1")
+    );
   },
 
   async download() {
@@ -2856,9 +2873,24 @@ const PDFViewerApplication = {
       () => eventBus.dispatch("resize", { source: window }),
       { signal }
     );
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC || CHROME")) {
+      window.addEventListener(
+        "popstate",
+        () => {
+          // Page navigation can leave entries for PDFs opened before a switch.
+          if (!this._isCurrentDocumentUrl()) {
+            location.reload();
+          }
+        },
+        { signal }
+      );
+    }
     window.addEventListener(
       "hashchange",
       () => {
+        if (!this._isCurrentDocumentUrl()) {
+          return;
+        }
         eventBus.dispatch("hashchange", {
           source: window,
           hash: document.location.hash.substring(1),

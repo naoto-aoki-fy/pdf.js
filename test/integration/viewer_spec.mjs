@@ -166,6 +166,67 @@ describe("PDF viewer", () => {
     }
   });
 
+  it("restores the document source when traversing earlier page history", async () => {
+    await Promise.all(
+      global.integrationSessions.map(async ({ name, browser }) => {
+        const page = await browser.newPage();
+        try {
+          const source = "/test/pdfs/tracemonkey.pdf";
+          const url = new URL(global.integrationBaseUrl);
+          url.searchParams.set("file", source);
+          url.hash = "page=2";
+          const waitForPage = number =>
+            page.waitForFunction(
+              expectedPage => {
+                const app = window.PDFViewerApplication;
+                return app?.isInitialViewSet && app.page === expectedPage;
+              },
+              {},
+              number
+            );
+
+          await page.goto(url.href);
+          await waitForPage(2);
+          await page.evaluate(() => {
+            window.PDFViewerApplication.pdfLinkService.goToPage(3);
+          });
+          await waitForPage(3);
+          const historyLength = await page.evaluate(() => history.length);
+          const localUrl = await page.evaluate(async () => {
+            const app = window.PDFViewerApplication;
+            const data = await app.pdfDocument.getData();
+            await app.open({
+              file: new File([data], "replacement.pdf", {
+                type: "application/pdf",
+              }),
+            });
+            return location.href;
+          });
+          await page.waitForFunction(
+            () => window.PDFViewerApplication?.isInitialViewSet
+          );
+          expect(await page.evaluate(() => history.length))
+            .withContext(`In ${name}`)
+            .toBe(historyLength);
+
+          await page.goBack();
+          await waitForPage(2);
+          expect(await page.evaluate(() => window.PDFViewerApplication.url))
+            .withContext(`In ${name}`)
+            .toBe(source);
+
+          await page.goForward();
+          await page.waitForSelector("#emptyViewerOpenButton", {
+            visible: true,
+          });
+          expect(page.url()).withContext(`In ${name}`).toBe(localUrl);
+        } finally {
+          await closeSinglePage(page);
+        }
+      })
+    );
+  });
+
   describe("EFOpen attachments", () => {
     let pages;
 
