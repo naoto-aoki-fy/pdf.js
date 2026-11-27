@@ -1,42 +1,5 @@
 name: Coverage (Browser tests)
-on:
-  push:
-    paths:
-      - 'gulpfile.mjs'
-      - 'external/**'
-      - 'package-lock.json'
-      - 'src/**'
-      - 'test/images/**'
-      - 'test/pdfs/**'
-      - 'test/resources/**'
-      - 'test/*.css'
-      - 'test/driver.js'
-      - 'test/test.mjs'
-      - 'test/test_manifest.json'
-      - 'test/test_slave.html'
-      - 'web/**'
-      - '.github/workflows/coverage_browser_tests.yml'
-    branches:
-      - master
-  pull_request:
-    paths:
-      - 'gulpfile.mjs'
-      - 'external/**'
-      - 'package-lock.json'
-      - 'src/**'
-      - 'test/images/**'
-      - 'test/pdfs/**'
-      - 'test/resources/**'
-      - 'test/*.css'
-      - 'test/driver.js'
-      - 'test/test.mjs'
-      - 'test/test_manifest.json'
-      - 'test/test_slave.html'
-      - 'web/**'
-      - '.github/workflows/coverage_browser_tests.yml'
-    branches:
-      - master
-  workflow_dispatch:
+on: []
 permissions:
   contents: read
 

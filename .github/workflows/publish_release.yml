@@ -1,7 +1,5 @@
 name: Publish release
-on:
-  release:
-    types: [published]
+on: []
 permissions: {}
 
 jobs:

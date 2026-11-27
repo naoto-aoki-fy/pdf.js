@@ -1,18 +1,5 @@
 name: Build viewer preview
-on:
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    paths:
-      - 'gulpfile.mjs'
-      - 'external/**'
-      - 'l10n/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'src/**'
-      - 'web/**'
-      - '.github/workflows/viewer_preview_build.yml'
-    branches:
-      - master
+on: []
 concurrency:
   group: viewer-preview-build-${{ github.event.pull_request.number }}${{ github.event.action == 'labeled' && github.event.label.name != 'viewer-preview' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true

@@ -2,9 +2,7 @@ name: Manage viewer preview
 # Users with write access can approve the PR head with `viewer-preview`.
 # Remove the label after processing so it can be reused.
 # This privileged workflow must not execute PR code.
-on:
-  pull_request_target: # zizmor: ignore[dangerous-triggers]
-    types: [labeled, closed]
+on: []
 permissions:
   contents: read
 

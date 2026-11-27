@@ -1,9 +1,6 @@
 name: Publish viewer preview
 # PR artifacts are untrusted. Do not execute their contents.
-on:
-  workflow_run: # zizmor: ignore[dangerous-triggers]
-    workflows: [Build viewer preview]
-    types: [completed]
+on: []
 permissions:
   contents: read
 
